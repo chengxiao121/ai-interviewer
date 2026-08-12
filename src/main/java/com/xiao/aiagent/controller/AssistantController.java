@@ -20,9 +20,10 @@ public class AssistantController {
     }
 
     @GetMapping("/chat")
-    public Flux<String> chat(@RequestParam(name = "userMessage") String userMessage){
+    public Flux<String> chat(@RequestParam(name = "userMessage") String userMessage,
+                             @RequestParam(defaultValue = "default") String sessionId){
         // ChatClient.call() 是阻塞调用，WebFlux 中需放到 boundedElastic 线程池执行，避免阻塞 Netty 事件循环线程
-        return agent.chat(userMessage);
+        return agent.chat(userMessage, sessionId);
     }
 
 }
