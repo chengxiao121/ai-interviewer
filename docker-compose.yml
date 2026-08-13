@@ -1,0 +1,40 @@
+# ============================================================
+# Docker Compose 配置文件
+# 作用：一条命令启动本项目依赖的两个中间件（Redis Stack + PostgreSQL）
+#   启动：docker compose up -d   （-d = 后台运行）
+#   停止：docker compose down    （停止并删除容器，数据卷会保留）
+# ============================================================
+
+services:   #下面每一项代表一个"服务"，一个服务 = 一个要运行的容器
+
+  redis-stack:
+    image: redis/redis-stack:latest  #用官方提供的 Redis Stack 镜像，创建容器，latest表示最新版本。Stack 版：它内置了 RediSearch 向量检索模块
+    container_name: redis-stack   #给容器起一个固定名字。
+    ports:
+      - "6379:6379"    # 把容器的 6379 映射到本机 6379。 6379是 Redis 的默认端口，Spring Boot 通过 localhost:6379 连接 Redis。
+      - "8001:8001"    # 把容器的 8001 映射到本机 8001。8001 是Redis 官方可视化网页
+    volumes:                      # volumes：数据卷挂载，格式 "卷名:容器内路径"。
+      - redis-data:/data
+    restart: unless-stopped       # restart：重启策略。则容器意外退出或宿主机重启后都会自动拉起（开发环境很省心）。
+
+  postgres:
+    image: postgres:16
+    container_name: aiagent-postgres
+    # environment：向容器传入环境变量。
+    # 官方 postgres 镜像约定：这三个变量只在"数据目录首次初始化"时生效，
+    environment:
+      POSTGRES_USER: admin        # 初始数据库用户名
+      POSTGRES_PASSWORD: admin123 # 该用户的密码（仅本地开发用，生产环境务必换掉）
+      POSTGRES_DB: aiagent          # 初始化时自动创建的默认数据库名
+    ports:
+      - "5432:5432"    # 5432 是 Postgres 的默认端口，Spring Boot 通过 localhost:5432 连接。
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+# volumes 顶级字段：声明"命名卷"（Named Volume）。
+# Docker 负责管理卷的真实存储位置（Windows 上存在 WSL2 虚拟磁盘里），无需关心具体路径。
+# 必须先在这里声明，上面的 services 才能引用它们。
+volumes:
+  redis-data:    # Redis 的数据卷
+  pg-data:       # PostgreSQL 的数据卷

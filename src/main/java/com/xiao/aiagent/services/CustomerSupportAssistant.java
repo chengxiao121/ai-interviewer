@@ -2,6 +2,7 @@ package com.xiao.aiagent.services;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -12,10 +13,11 @@ public class CustomerSupportAssistant {
     private final MessageChatMemoryAdvisor chatMemoryAdvisor;
 
     public CustomerSupportAssistant(ChatClient.Builder builder,
-                                    MessageChatMemoryAdvisor chatMemoryAdvisor){
+                                    MessageChatMemoryAdvisor chatMemoryAdvisor,
+                                    QuestionAnswerAdvisor questionAnswerAdvisor){
         this.chatClient = builder
                 .defaultSystem("您是航空公司的客户聊天支持代理，请以友好、乐于助人且愉快的方式来回复。请讲中文。")
-                .defaultAdvisors(chatMemoryAdvisor)         //// 注册记忆顾问
+                .defaultAdvisors(questionAnswerAdvisor, chatMemoryAdvisor)         //// RAG 在前，记忆在后
                 .build();
         this.chatMemoryAdvisor = chatMemoryAdvisor;
     }
