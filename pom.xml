@@ -23,13 +23,23 @@
 
     <dependencyManagement>
         <dependencies>
+
             <dependency>
                 <groupId>org.springframework.ai</groupId>
                 <artifactId>spring-ai-bom</artifactId>
-                <version>1.1.0</version>
+                <version>1.1.2</version>          <!-- 1.1.0 → 1.1.2 -->
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
+            <dependency>
+                <groupId>com.alibaba.cloud.ai</groupId>
+                <artifactId>spring-ai-alibaba-bom</artifactId>
+                <version>1.1.2.0</version>        <!-- 新增：管理阿里系依赖版本 -->
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
         </dependencies>
     </dependencyManagement>
 
@@ -77,6 +87,29 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- Redis 向量存储（阶段 2.2 RAG 用，与协议无关） -->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-vector-store-redis</artifactId>
+        </dependency>
+
+        <!-- 短期记忆：滑动窗口 + Redis 持久化（阶段 2.1 用）
+             注意：spring-ai-alibaba-bom 不管理 memory 模块版本，必须手写版本号；
+             聚合包 spring-ai-alibaba-starter-memory 会捆绑 jdbc/tablestore/elasticsearch，太臃肿，不引入 -->
+        <dependency>
+            <groupId>com.alibaba.cloud.ai</groupId>
+            <artifactId>spring-ai-alibaba-starter-memory-redis</artifactId>
+            <version>1.1.2.0</version>
+        </dependency>
+
+        <!-- Jedis 连接池：向量库自动装配（RedisVectorStore）基于 Jedis 客户端，
+             需要 commons-pool2 才能创建 JedisConnectionFactory（版本由 Boot 父 POM 管理） -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>
