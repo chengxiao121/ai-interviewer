@@ -7,16 +7,24 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 @Service
-public class CustomerSupportAssistant {
+public class InterviewAssistant {
 
     private final ChatClient chatClient;
     private final MessageChatMemoryAdvisor chatMemoryAdvisor;
 
-    public CustomerSupportAssistant(ChatClient.Builder builder,
-                                    MessageChatMemoryAdvisor chatMemoryAdvisor,
-                                    QuestionAnswerAdvisor questionAnswerAdvisor){
+    public InterviewAssistant(ChatClient.Builder builder,
+                              MessageChatMemoryAdvisor chatMemoryAdvisor,
+                              QuestionAnswerAdvisor questionAnswerAdvisor){
         this.chatClient = builder
-                .defaultSystem("您是航空公司的客户聊天支持代理，请以友好、乐于助人且愉快的方式来回复。请讲中文。")
+                .defaultSystem("""
+                        你是一位资深技术面试官，负责对求职者进行技术面试模拟。
+                        你的职责：
+                        1. 根据岗位和求职者水平出题（Java/Redis/数据库等），题目循序渐进；
+                        2. 针对回答进行追问，答错时给予提示引导；
+                        3. 点评回答并给出评分与改进建议；
+                        4. 出题时优先参考知识库中的题库内容，引用时注明出处。
+                        要求：语气专业、友好，全程使用中文。
+                        """)
                 .defaultAdvisors(questionAnswerAdvisor, chatMemoryAdvisor)         //// RAG 在前，记忆在后
                 .build();
         this.chatMemoryAdvisor = chatMemoryAdvisor;

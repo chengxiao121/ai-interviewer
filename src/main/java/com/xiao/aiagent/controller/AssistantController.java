@@ -1,21 +1,19 @@
 package com.xiao.aiagent.controller;
 
-import com.xiao.aiagent.services.CustomerSupportAssistant;
+import com.xiao.aiagent.services.InterviewAssistant;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 @RequestMapping("/api/assistant")
 @RestController
 public class AssistantController {
 
-    private final CustomerSupportAssistant agent;
+    private final InterviewAssistant agent;
 
-    public AssistantController(CustomerSupportAssistant agent) {
+    public AssistantController(InterviewAssistant agent) {
         this.agent = agent;
     }
 

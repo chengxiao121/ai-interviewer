@@ -12,10 +12,10 @@
     </parent>
 
     <groupId>com.example</groupId>
-    <artifactId>flight-booking</artifactId>
+    <artifactId>ai-interviewer</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>flight-booking</name>
-    <description>Flight Booking AI Assistant (from-scratch clone)</description>
+    <name>ai-interviewer</name>
+    <description>AI 智能面试官：基于 Spring AI 的多 Agent 面试陪练系统</description>
 
     <properties>
         <java.version>17</java.version>
