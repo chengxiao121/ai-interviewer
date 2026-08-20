@@ -122,6 +122,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- MCP Client：接入外部工具生态（阶段 2.5）-->
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-starter-mcp-client</artifactId>
+        </dependency>
+
         <!-- 简化 getter/setter/toString 等模板代码 -->
         <dependency>
             <groupId>org.projectlombok</groupId>

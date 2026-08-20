@@ -1,14 +1,20 @@
 package com.xiao.aiagent.services;
 
 import com.xiao.aiagent.tools.InterviewTools;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
+import org.springframework.ai.tool.ToolCallbackProvider;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 @Service
 public class InterviewAssistant {
+
+    private static final Logger log = LoggerFactory.getLogger(InterviewAssistant.class);
 
     /**
      * 系统提示（纯静态，不含运行时变量）。
@@ -23,6 +29,11 @@ public class InterviewAssistant {
             3. 点评回答并给出评分与改进建议，点评完成后必须调用 scoreRecord 工具把评分落库；
             4. 出题时优先参考知识库中的题库内容，引用时注明出处。
             5. 求职者询问答题统计或薄弱考点时，调用 questionStats 工具查询后如实转述结果。
+            6. 求职者分享某个 URL（文章、技术文档等）让你参考时，使用 fetch 工具读取该网页内容，
+               基于文章内容出题，弥补题库可能没有覆盖的主题。
+            7. 求职者提供本地项目目录路径让你看代码时，使用文件读取工具（read_file/list_directory/search_files）
+               读取其代码，针对真实实现提问（如"你这里为什么用 X 方案？有什么风险？"）。
+               注意：你只能读取文件，不要修改或删除求职者的任何文件。
 
             评分标准（0~10 分，请严格按此打分）：
             - 回答是否准确、完整（核心得分项）；
@@ -39,12 +50,30 @@ public class InterviewAssistant {
     public InterviewAssistant(ChatClient.Builder builder,
                               MessageChatMemoryAdvisor chatMemoryAdvisor,
                               QuestionAnswerAdvisor questionAnswerAdvisor,
-                              InterviewTools interviewTools){
-        this.chatClient = builder
+                              InterviewTools interviewTools,
+                              ObjectProvider<ToolCallbackProvider> mcpToolCallbackProvider){
+        // MCP 工具通过 ObjectProvider 注入（而非直接 @Autowired）：
+        // 原因是降级兼容——当未配置 MCP server 或 npx 拉包失败时，自动装配不会产出
+        // ToolCallbackProvider bean，此时 getIfAvailable() 返回 null，ChatClient 只用现有
+        // @Tool 工具，核心面试功能不受影响；配好 MCP 时才把外部工具也注册进去。
+        ToolCallbackProvider mcpProvider = mcpToolCallbackProvider.getIfAvailable();
+        if (mcpProvider != null) {
+            log.info("MCP 工具已注入面试 Agent，可用工具数：{}", mcpProvider.getToolCallbacks().length);
+        } else {
+            log.warn("未检测到 MCP 工具（未配置 server 或 npx 拉包失败），面试 Agent 仅使用内置 @Tool 工具。");
+        }
+
+        ChatClient.Builder chatBuilder = builder
                 .defaultSystem(SYSTEM_PROMPT)
                 .defaultAdvisors(questionAnswerAdvisor, chatMemoryAdvisor)         //// RAG 在前，记忆在后
-                .defaultTools(interviewTools)                                       //// 注册 Function Calling 工具
-                .build();
+                .defaultTools(interviewTools);                                      //// 注册 Function Calling 工具
+
+        // MCP 工具与内置 @Tool 并存：defaultToolCallbacks 接受 ToolCallbackProvider...
+        if (mcpProvider != null) {
+            chatBuilder.defaultToolCallbacks(mcpProvider);
+        }
+
+        this.chatClient = chatBuilder.build();
     }
 
     /**
