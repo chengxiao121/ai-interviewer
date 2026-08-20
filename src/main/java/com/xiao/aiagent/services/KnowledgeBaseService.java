@@ -76,7 +76,7 @@ public class KnowledgeBaseService {
     private void ingestFile(Resource resource, String source) throws IOException {
         String fileName = resource.getFilename();
 
-        // 读内容 + 计算 SHA-256 哈希
+        // 读内容 + 计算 MD5 哈希
         String content = new String(resource.getContentAsByteArray(), StandardCharsets.UTF_8);
         String contentHash = DigestUtils.md5DigestAsHex(content.getBytes(StandardCharsets.UTF_8));
 

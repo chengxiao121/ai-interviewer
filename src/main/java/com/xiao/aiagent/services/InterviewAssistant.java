@@ -47,13 +47,27 @@ public class InterviewAssistant {
                 .build();
     }
 
+    /**
+     * 发送一次面试对话请求。
+     *
+     * sessionId 由前端（或 API 调用方）传入，后端不生成——它是"会话标识"，
+     * 纯后端测试时必须在请求体里自己带一个，换值 = 新会话、复用 = 续同一会话。
+     *
+     * 同一个 sessionId 被用于两件事（见方法体内两处）：
+     *  1. chat_memory_conversation_id → 记忆顾问按会话隔离历史消息（Redis 滑动窗口）；
+     *  2. .toolContext(...) 注入 sessionId → 工具（如 scoreRecord）落库时的会话归属。
+     *     这里不走普通参数而是走 ToolContext：因为 ToolContext 参数会被 Spring AI
+     *     从模型可见的工具 schema 里剔除，sessionId 对模型不可见、也不可能被模型误填串会。
+     */
     public Flux<String> chat(String userMessage, String sessionId){
         return this.chatClient
                 .prompt()
                 .user(userMessage)
                 // 记忆隔离用 sessionId
                 .advisors(a -> a.param("chat_memory_conversation_id", sessionId))
-                // 工具上下文注入 sessionId：scoreRecord 落库时按会话归属（不进模型可见参数）
+                // 把 sessionId 塞进 ToolContext（服务端→工具的上下文容器）。
+                // 工具方法声明 ToolContext 参数时，框架会把这个容器带给它，且不进模型的参数列表。
+                // 与工具内 toolContext.getContext().get("sessionId") 配对：这里写，那里读。
                 .toolContext(java.util.Map.of("sessionId", sessionId))
                 .stream()
                 .content();

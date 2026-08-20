@@ -40,7 +40,11 @@ public class InterviewTools {
      * @param answer    求职者的回答
      * @param score     评分（0~10，可带一位小数）
      * @param feedback  面试官点评 / 改进建议
-     * @param toolContext 工具上下文，sessionId 由服务端注入（不由模型填写，处于会话隔离）
+     * @param toolContext 工具上下文容器（Spring AI 注入，不是模型填的）。
+     *        sessionId 由服务端在 chat() 的 .toolContext(...) 放开入，这里取出作为评分归属。
+     *        难点：不能把 sessionId 写成普通 @ToolParam 参数——
+     *        普通参数会进模型可见的工具 schema，模型要填、可能填错串会；
+     *        ToolContext 类型被框架剔除于 schema 之外，模型看不到也改不了，会话隔离最稳。
      * @return 保存结果提示（含记录 id），供 LLM 向用户转述
      */
     @Tool(description = "保存单题评分到数据库。面试官点评完一道题后调用，把题目、回答、评分、点评落库。")
@@ -52,6 +56,7 @@ public class InterviewTools {
             @ToolParam(description = "面试官点评或改进建议") String feedback,
             ToolContext toolContext) {
 
+        // 从 ToolContext 取出服务端注入的 sessionId（和 chat() 里的 .toolContext(...) 配对：那边写，这里读）
         String sessionId = (String) toolContext.getContext().get("sessionId");
         log.info("工具调用 scoreRecord：sessionId={}, topic={}, score={}", sessionId, topic, score);
 
@@ -61,7 +66,7 @@ public class InterviewTools {
             log.warn("评分越界已钳制：原始 score={}，修正为 {}", score, validScore);
         }
 
-        // 幂等去重：同会话同题目已评分过则更新原记录，避免模型对同一道题重复落库污染统计
+        // 幂等去重：同会话同题目已评分过则更新原记录，避免模型对同一道题重复写进数据库污染统计
         Optional<ScoreRecord> existing = scoreRecordRepository.findBySessionIdAndQuestion(sessionId, question);
         if (existing.isPresent()) {
             ScoreRecord record = existing.get();
