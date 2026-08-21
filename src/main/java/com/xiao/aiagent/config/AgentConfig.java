@@ -23,13 +23,15 @@ public class AgentConfig {
                 .build();
     }
 
-    // 短期记忆：滑动窗口（最多保留 20 条消息）+ Redis 持久化
+    // 短期记忆：滑动窗口 + Redis 持久化。
+    // maxMessages=60：qwen3.7-plus 上下文窗口 1M token，一场面试全部历史远未到上限，
+    // 直接调大窗口全量装入，无需摘要压缩（原"会话内摘要压缩"方案已论证砍掉）。
     // 阶段 3 起不再靠 MessageChatMemoryAdvisor 自动注入，改由 InterviewAssistant 手动读写窗口
     @Bean
     public ChatMemory chatMemory(ChatMemoryRepository chatMemoryRepository) {
         return MessageWindowChatMemory.builder()
                 .chatMemoryRepository(chatMemoryRepository)
-                .maxMessages(20)
+                .maxMessages(60)
                 .build();
     }
 
