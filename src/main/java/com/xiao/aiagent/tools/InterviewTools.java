@@ -1,5 +1,7 @@
 package com.xiao.aiagent.tools;
 
+import com.alibaba.cloud.ai.graph.RunnableConfig;
+import com.alibaba.cloud.ai.graph.agent.tools.ToolContextHelper;
 import com.xiao.aiagent.entity.ScoreRecord;
 import com.xiao.aiagent.repository.ScoreRecordRepository;
 import org.slf4j.Logger;
@@ -41,10 +43,11 @@ public class InterviewTools {
      * @param score     评分（0~10，可带一位小数）
      * @param feedback  面试官点评 / 改进建议
      * @param toolContext 工具上下文容器（Spring AI 注入，不是模型填的）。
-     *        sessionId 由服务端在 chat() 的 .toolContext(...) 放开入，这里取出作为评分归属。
+     *        阶段 3（ReactAgent）起：框架把本次运行的 RunnableConfig 放进工具上下文（key=_AGENT_CONFIG_），
+     *        chat() 里 build 时已写入 threadId=sessionId，这里取出作为评分归属。
      *        难点：不能把 sessionId 写成普通 @ToolParam 参数——
      *        普通参数会进模型可见的工具 schema，模型要填、可能填错串会；
-     *        ToolContext 类型被框架剔除于 schema 之外，模型看不到也改不了，会话隔离最稳。
+     *        threadId 由服务端设置，模型看不到也改不了，会话隔离最稳。
      * @return 保存结果提示（含记录 id），供 LLM 向用户转述
      */
     @Tool(description = "保存单题评分到数据库。面试官点评完一道题后调用，把题目、回答、评分、点评落库。")
@@ -56,8 +59,10 @@ public class InterviewTools {
             @ToolParam(description = "面试官点评或改进建议") String feedback,
             ToolContext toolContext) {
 
-        // 从 ToolContext 取出服务端注入的 sessionId（和 chat() 里的 .toolContext(...) 配对：那边写，这里读）
-        String sessionId = (String) toolContext.getContext().get("sessionId");
+        // 阶段 3：从框架注入的 RunnableConfig 取 threadId 作为 sessionId（与 InterviewAssistant.chat() 里写入的配对）
+        String sessionId = ToolContextHelper.getConfig(toolContext)
+                .flatMap(RunnableConfig::threadId)
+                .orElse("unknown");
         log.info("工具调用 scoreRecord：sessionId={}, topic={}, score={}", sessionId, topic, score);
 
         // 防御性校验：评分必须在 0~10，越界值钳制到边界（LLM 打分偶尔会给出非法值，避免脏数据污染统计）
@@ -101,7 +106,10 @@ public class InterviewTools {
     @Tool(description = "查询某会话的答题统计：各考点的答题数、平均分、最低分，并列出薄弱考点。用户问薄弱考点或统计时调用。")
     public String questionStats(ToolContext toolContext) {
 
-        String sessionId = (String) toolContext.getContext().get("sessionId");
+        // 阶段 3：sessionId 取自框架注入的 RunnableConfig.threadId（与 chat() 里写入的配对）
+        String sessionId = ToolContextHelper.getConfig(toolContext)
+                .flatMap(RunnableConfig::threadId)
+                .orElse("unknown");
         log.info("工具调用 questionStats：sessionId={}", sessionId);
 
         List<Object[]> rows = scoreRecordRepository.aggregateByTopic(sessionId);

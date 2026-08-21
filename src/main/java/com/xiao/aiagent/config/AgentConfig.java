@@ -1,13 +1,10 @@
 package com.xiao.aiagent.config;
 
+import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.memory.redis.JedisRedisChatMemoryRepository;
-import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
-import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
-import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.boot.autoconfigure.data.redis.RedisProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -27,6 +24,7 @@ public class AgentConfig {
     }
 
     // 短期记忆：滑动窗口（最多保留 20 条消息）+ Redis 持久化
+    // 阶段 3 起不再靠 MessageChatMemoryAdvisor 自动注入，改由 InterviewAssistant 手动读写窗口
     @Bean
     public ChatMemory chatMemory(ChatMemoryRepository chatMemoryRepository) {
         return MessageWindowChatMemory.builder()
@@ -35,21 +33,13 @@ public class AgentConfig {
                 .build();
     }
 
-    // 记忆顾问：自动把历史消息注入每次请求（会话由 sessionId 隔离）
+    // Agent 运行状态保存器：ReactAgent 的 ReAct 循环 checkpoint（"记录本快照"）按 threadId(=sessionId) 隔离。
+    // 用内存版 MemorySaver：RedisSaver 依赖 Redisson 客户端，与向量库强依赖的 Jedis 冲突，不引入；
+    // 单次 ReAct 运行结束会 release 掉 checkpoint（见 InterviewAssistant），不会无限累积。
+    // 长期会话记忆不靠这里：它由 chatMemory（Redis 窗口）承担，二者分工是"双层记忆"的雏形。
     @Bean
-    public MessageChatMemoryAdvisor chatMemoryAdvisor(ChatMemory chatMemory) {
-        return MessageChatMemoryAdvisor.builder(chatMemory).build();
-    }
-
-    // RAG 顾问：VectorStore 由 spring-ai-starter-vector-store-redis 自动装配（Jedis 客户端）
-    @Bean
-    public QuestionAnswerAdvisor questionAnswerAdvisor(VectorStore vectorStore) {
-        return QuestionAnswerAdvisor.builder(vectorStore)
-                .searchRequest(SearchRequest.builder()
-                        .similarityThreshold(0.7)
-                        .topK(3)
-                        .build())
-                .build();
+    public MemorySaver memorySaver() {
+        return new MemorySaver();
     }
 
 }

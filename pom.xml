@@ -128,6 +128,12 @@
             <artifactId>spring-ai-starter-mcp-client</artifactId>
         </dependency>
 
+        <!-- 阶段 3.1：ReAct Agent 框架（ReactAgent 显式推理循环，版本由 spring-ai-alibaba-bom 管理） -->
+        <dependency>
+            <groupId>com.alibaba.cloud.ai</groupId>
+            <artifactId>spring-ai-alibaba-agent-framework</artifactId>
+        </dependency>
+
         <!-- 简化 getter/setter/toString 等模板代码 -->
         <dependency>
             <groupId>org.projectlombok</groupId>
