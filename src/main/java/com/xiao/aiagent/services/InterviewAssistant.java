@@ -5,6 +5,8 @@ import com.alibaba.cloud.ai.graph.agent.Builder;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
+import com.xiao.aiagent.entity.CodeProfile;
+import com.xiao.aiagent.repository.CodeProfileRepository;
 import com.xiao.aiagent.tools.InterviewTools;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,9 +66,17 @@ public class InterviewAssistant {
             5. 求职者询问答题统计或薄弱考点时，调用 questionStats 工具查询后如实转述结果。
             6. 求职者分享某个 URL（文章、技术文档等）让你参考时，使用 fetch 工具读取该网页内容，
                基于文章内容出题，弥补题库可能没有覆盖的主题。
-            7. 求职者提供本地项目目录路径让你看代码时，使用文件读取工具（read_file/list_directory/search_files）
-               读取其代码，针对真实实现提问（如"你这里为什么用 X 方案？有什么风险？"）。
+            7. 代码评审面试（求职者分享代码、让你针对其实现提问）时：先调用 getCodeFacts 工具取回
+               代码分析事实清单，基于清单中的技术栈、实现细节、风险点、可追问点出题追问。
+               清单信息不够时，可用文件读取工具（read_file/list_directory/search_files）补充查看代码。
                注意：你只能读取文件，不要修改或删除求职者的任何文件。
+
+            输出格式要求（必须严格遵守）：
+            - 题目用 Markdown 标题单独成行，例如：### 第 1 题：线程池（Java 并发）
+            - 题目出处单独成段并用引用格式：> 📚 出处：面试题库-XX模块
+            - 提示单独成段：💡 提示：...
+            - 不同部分（题目/出处/提示/你的点评）之间必须空一行，不要连写在一起。
+            - 使用 Markdown 加粗、列表等格式让回答清晰易读。
 
             评分标准（0~10 分，请严格按此打分）：
             - 回答是否准确、完整（核心得分项）；
@@ -80,7 +90,7 @@ public class InterviewAssistant {
 
     // ReactAgent：拼装好的"一次面试循环"的可运行图（构造时 build 一次，之后每次请求复用）
     private final ReactAgent agent;
-    // 短期记忆：Redis 滑动窗口（20 条对话）。ReactAgent 不带记忆 advisor，
+    // 短期记忆：Redis 滑动窗口（60 条对话）。ReactAgent 不带记忆 advisor，
     // 所以"取历史 / 存回窗口"都靠我们在这类里手动调它（见 chat() 第 1、4 步）
     private final ChatMemory chatMemory;
     // Agent 运行状态保存器：每轮循环的"记录本快照"按 threadId 隔离。
@@ -88,13 +98,17 @@ public class InterviewAssistant {
     private final MemorySaver memorySaver;
     // 题库向量库（自动装配的 ai-agent-index）：供 searchKnowledge() 做前置 RAG 检索用
     private final VectorStore knowledgeStore;
+    // 代码事实清单仓储（阶段 4.1 新增）：双 Agent 流水线里，分析 Agent 把清单落这表，
+    // 面试官从这里按 sessionId 取清单出题。这就是 Agent 间"落库传递数据契约"的读取端
+    private final CodeProfileRepository codeProfileRepository;
 
     public InterviewAssistant(ChatModel chatModel,
                               InterviewTools interviewTools,
                               ObjectProvider<ToolCallbackProvider> mcpToolCallbackProvider,
                               VectorStore vectorStore,
                               ChatMemory chatMemory,
-                              MemorySaver memorySaver) {
+                              MemorySaver memorySaver,
+                              CodeProfileRepository codeProfileRepository) {
 
         // MCP 工具通过 ObjectProvider 注入（而非直接 @Autowired）：
         // 原因是降级兼容——当未配置 MCP server 或 npx 拉包失败时，自动装配不会产出
@@ -126,6 +140,19 @@ public class InterviewAssistant {
         this.chatMemory = chatMemory;
         this.memorySaver = memorySaver;
         this.knowledgeStore = vectorStore;
+        this.codeProfileRepository = codeProfileRepository;
+    }
+
+    /**
+     * 暴露内部的 ReactAgent 给编排器（阶段 4.1 新增）。
+     *
+     * SequentialAgent.builder().subAgents(...) 要求子 Agent 是 Agent 类型（ReactAgent），
+     * 而本类是个 Service 包装。编排器（CodeReviewPipeline）通过此方法拿到真正的 ReactAgent
+     * 实例来组装流水线。与 CodeAnalyzerAgent.getAgent() 同一模式——
+     * Service 管理生命周期和业务逻辑，需要时透出 Agent 参与编排。
+     */
+    public ReactAgent getAgent() {
+        return agent;
     }
 
     /**
@@ -141,11 +168,19 @@ public class InterviewAssistant {
     public Flux<String> chat(String userMessage, String sessionId) {
 
         // ── 第 1 步：给"这场面试"准备好开场记录本（图状态 messages 的初始内容）──
-        // 这里在模拟以前记忆顾问 + RAG 顾问自动做的事，只是现在由我们显式组装：
-        //   ① 长期/题库知识（searchKnowledge 检索结果）→ 写成一条 system 消息；
-        //   ② 短期窗口历史（chatMemory.get）→ 最近 20 条对话抄进来；
-        //   ③ 最后放上面试者这句新提问。
+        // 这里在模拟以前记忆顾问 + RAG 顾问自动做的事，只是现在由我们显式组装。
+        // 阶段 4.1 新增：还可能注入【代码事实清单】——由上游 CodeAnalyzerAgent 产出、
+        // 落库在 code_profile 表，面试官据此出题（这是双 Agent 数据契约的消费端）。
+        //   ① 代码事实清单（loadCodeFacts 取自 code_profile 表）→ system 消息；
+        //   ② 题库知识（searchKnowledge 检索结果）→ system 消息；
+        //   ③ 短期窗口历史（chatMemory.get）→ 最近 60 条对话抄进来；
+        //   ④ 最后放上面试者这句新提问。
         List<Message> messages = new ArrayList<>();
+
+        String codeFactsContext = loadCodeFacts(sessionId);
+        if (!codeFactsContext.isBlank()) {
+            messages.add(new SystemMessage(codeFactsContext));
+        }
 
         String knowledgeContext = searchKnowledge(userMessage);
         if (!knowledgeContext.isBlank()) {
@@ -179,8 +214,7 @@ public class InterviewAssistant {
         AtomicReference<String> fullAnswer = new AtomicReference<>("");
 
         // ── 第 4 步：返回流 + 收尾 ──
-        // Flux.concat：先在前面拼一个"💭 正在思考…"的状态提示，再接回答正文。
-        return Flux.concat(Flux.just("💭 正在思考…\n"), answer)
+        return answer
                 .doOnNext(chunk -> fullAnswer.set(fullAnswer.get() + chunk))  // 边流边累加出完整回答
                 .doFinally(signal -> {                                       // 流结束后统一收尾
                     if (signal == SignalType.ON_COMPLETE) {                  // 只有"正常跑完"才算数
@@ -199,6 +233,38 @@ public class InterviewAssistant {
                         }
                     }
                 });
+    }
+
+    /**
+     * 加载代码事实清单（阶段 4.1 新增）——双 Agent 数据契约的消费端。
+     *
+     * 这是面试官 Agent"消费上游产物"的核心方法：
+     *   1. 按 sessionId 从 code_profile 表取分析 Agent 落库的清单（可能多条，多个文件）；
+     *   2. 没有清单（不是代码评审面试）返回空串，chat() 据此跳过注入。
+     *
+     * 为什么直接把 factsJson 原文传给 LLM、不做 Jackson 解析？
+     *   清单的唯一读者是 LLM，而 LLM 读 JSON 本来就是强项；
+     *   不解析时，坏 JSON 对 LLM 也只是"一段长得像 JSON 的文字"，照样能出题——
+     *   风险 15"坏 JSON 不阻塞面试"的目的天然满足，还省掉一层解析和等价于"不解析"的降级代码。
+     *   判据：LLM 消费 → 传原文；代码要程序化处理（过滤/统计/聚合）→ 才解析成对象。
+     *   当前只有 LLM 消费，故不解析（若 4.3 需要程序化处理，需求明确时再加回）。
+     *
+     * 落库传递的红利也体现在这：如果该会话已分析过，这里直接取到清单，
+     * 不用重跑分析 Agent——这就是第 1 步说的"落库而非内存传递"的复用价值。
+     */
+    private String loadCodeFacts(String sessionId) {
+        List<CodeProfile> profiles = codeProfileRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
+        if (profiles == null || profiles.isEmpty()) {
+            // 该会话没有代码分析记录 → 不是代码评审面试，正常走题库出题
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder("【代码评审面试背景】以下是对候选人代码的分析结果（JSON），请基于此出题追问：\n\n");
+        for (CodeProfile profile : profiles) {
+            sb.append("文件：").append(profile.getFilePath()).append("\n")
+              .append(profile.getFactsJson()).append("\n\n");
+        }
+        return sb.toString();
     }
 
     /** 题库 RAG 前置检索：只基于用户本轮消息检索一次，结果注入为 system 消息（替代 QuestionAnswerAdvisor） */

@@ -2,7 +2,9 @@ package com.xiao.aiagent.tools;
 
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.tools.ToolContextHelper;
+import com.xiao.aiagent.entity.CodeProfile;
 import com.xiao.aiagent.entity.ScoreRecord;
+import com.xiao.aiagent.repository.CodeProfileRepository;
 import com.xiao.aiagent.repository.ScoreRecordRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,9 +19,13 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * 面试场景自定义工具集（Function Calling）。
- * 通过 @Tool 注解暴露给 ChatClient，由 LLM 在对话中按需调用。
- * 注册方式：InterviewAssistant 构造 ChatClient 时 .defaultTools(this) 注入。
+ * 面试官 Agent 专用工具集（Function Calling）。
+ * 通过 @Tool 注解暴露给 ReactAgent，由 LLM 在对话中按需调用。
+ * 注册方式：InterviewAssistant 构造 ReactAgent 时 .methodTools(this) 注入。
+ *
+ * 阶段 4.1 起本类与 CodeAnalyzerTools 分工：
+ *   - 这里是【面试官】的工具：scoreRecord / questionStats / calculator / getCodeFacts；
+ *   - CodeAnalyzerTools 是【分析官】的工具：saveCodeProfile。
  */
 @Component
 public class InterviewTools {
@@ -27,9 +33,12 @@ public class InterviewTools {
     private static final Logger log = LoggerFactory.getLogger(InterviewTools.class);
 
     private final ScoreRecordRepository scoreRecordRepository;
+    private final CodeProfileRepository codeProfileRepository;
 
-    public InterviewTools(ScoreRecordRepository scoreRecordRepository) {
+    public InterviewTools(ScoreRecordRepository scoreRecordRepository,
+                          CodeProfileRepository codeProfileRepository) {
         this.scoreRecordRepository = scoreRecordRepository;
+        this.codeProfileRepository = codeProfileRepository;
     }
 
     /**
@@ -134,6 +143,42 @@ public class InterviewTools {
             sb.append("没有平均分低于 6 分的薄弱考点，整体表现良好。");
         } else {
             sb.append("薄弱考点（平均分低于 6 分）：").append(String.join("、", weakTopics));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * 获取代码评审面试的事实清单（阶段 4.1 新增）。
+     * 面试官在代码评审面试中调用，取回上游 CodeAnalyzerAgent 分析落库的结构化清单，
+     * 基于清单中的技术栈/实现细节/风险点/可追问点出题追问。
+     *
+     * 为什么需要这个工具（与 InterviewAssistant.loadCodeFacts 的分工）：
+     *   - loadCodeFacts 是外层"前置注入"：重开会话时，清单已在库，外层先查好塞进 system 消息；
+     *   - 本工具是 LLM "主动拉取"：SequentialAgent 流水线首次运行时，分析 Agent 刚落库，
+     *     面试官作为子 Agent 跑，外层代码插不进手，只能靠 LLM 自己调本工具取。
+     * 两者都是"从 code_profile 读清单"，只是触发方式不同（前置注入 vs 主动拉取）。
+     *
+     * @param toolContext 工具上下文，sessionId 由服务端注入
+     * @return 事实清单原文（JSON），供 LLM 出题参考
+     */
+    @Tool(description = "获取代码评审面试的事实清单。代码评审面试（求职者分享代码让你针对其实现提问）时调用，取回代码分析结果，基于清单中的技术栈、实现细节、风险点、可追问点出题。")
+    public String getCodeFacts(ToolContext toolContext) {
+
+        // sessionId 取自框架注入的 RunnableConfig.threadId（与其他工具同一套机制）
+        String sessionId = ToolContextHelper.getConfig(toolContext)
+                .flatMap(RunnableConfig::threadId)
+                .orElse("unknown");
+        log.info("工具调用 getCodeFacts：sessionId={}", sessionId);
+
+        List<CodeProfile> profiles = codeProfileRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
+        if (profiles == null || profiles.isEmpty()) {
+            return "当前会话还没有代码分析记录，请按普通面试流程出题。";
+        }
+
+        StringBuilder sb = new StringBuilder("代码分析事实清单如下：\n\n");
+        for (CodeProfile profile : profiles) {
+            sb.append("文件：").append(profile.getFilePath()).append("\n")
+              .append(profile.getFactsJson()).append("\n\n");
         }
         return sb.toString();
     }

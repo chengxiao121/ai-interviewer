@@ -148,6 +148,16 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <!-- JVM 强制 UTF-8（风险 5 修复）：
+                         应用 fork 出的子进程不继承 .mvn/jvm.config（那是 Maven 本体的 MAVEN_OPTS），
+                         必须在这里给 spring-boot:run 的应用进程显式传 -Dfile.encoding=UTF-8。
+                         否则 Windows 中文系统 JVM 默认 GBK，会引发：
+                           ① Redis 记忆中文乱码（存成 ?）
+                           ② MCP Filesystem read_file 响应中文注释被 GBK 误解码，
+                              吞掉 JSON 引号导致解析失败，工具调用超时 -->
+                    <jvmArguments>-Dfile.encoding=UTF-8</jvmArguments>
+                </configuration>
             </plugin>
         </plugins>
     </build>
