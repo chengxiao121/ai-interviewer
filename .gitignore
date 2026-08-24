@@ -1,0 +1,35 @@
+# ===== IDE =====
+.idea/
+*.iml
+.vscode/
+
+# ===== 构建产物 =====
+target/
+build/
+out/
+
+# ===== 前端 =====
+frontend/node_modules/
+frontend/dist/
+# 前端构建产物拷贝到后端静态目录，由 npm run build 生成，不入库
+src/main/resources/static/assets/
+
+# ===== 本地数据（外部知识库目录，风险项：内部资料不进 git）=====
+data/
+*.log
+
+# ===== ZCode / 工具配置 =====
+.zcode/
+
+# ===== 本地调试产物 =====
+# 接口验证 payload 与响应（含本地文件路径与 API 行为快照，不入库）
+.verify-payloads/
+# Maven 依赖树排查临时文件
+deps.txt
+deps2.txt
+# Obsidian 本地工作区
+docs/.obsidian/
+
+# ===== 系统文件 =====
+.DS_Store
+Thumbs.db

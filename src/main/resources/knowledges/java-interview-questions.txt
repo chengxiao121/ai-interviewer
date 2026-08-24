@@ -1,0 +1,39 @@
+# Java 后端面试题库
+
+## 集合
+
+【考点】HashMap 的底层数据结构是什么？扩容机制是怎样的？
+【参考答案】JDK 1.8 起采用数组 + 链表 + 红黑树：默认初始容量 16，负载因子 0.75。当链表长度超过 8 且数组长度达到 64 时，链表转红黑树；元素总数超过容量 × 负载因子时触发扩容，容量翻倍并重新计算下标（rehash）。JDK 1.7 头插法在并发扩容时可能形成环形链表导致死循环，1.8 改为尾插法解决。
+
+【考点】ArrayList 和 LinkedList 的区别？各自适用场景？
+【参考答案】ArrayList 基于动态数组，随机访问 O(1)，增删中间元素 O(n)；LinkedList 基于双向链表，随机访问 O(n)，头尾增删 O(1)。查询多选 ArrayList，频繁头尾插入删除选 LinkedList。注意 ArrayList 扩容是 1.5 倍，LinkedList 每个节点有额外的指针内存开销。
+
+【考点】ConcurrentHashMap 如何保证线程安全？
+【参考答案】JDK 1.8 采用 CAS + synchronized：对空桶用 CAS 写入，对非空桶锁住桶头节点（细粒度锁），读操作无锁，size 通过分段计数 + baseCount 统计。相比 1.7 的分段锁（Segment），锁粒度更细，并发度更高。
+
+## 并发
+
+【考点】synchronized 和 ReentrantLock 的区别？
+【参考答案】synchronized 是 JVM 层面的隐式锁，自动加锁释放，JDK 1.6 后经过偏向锁、轻量级锁、重量级锁的锁升级优化，性能已接近显式锁；ReentrantLock 是 API 层面的显式锁，支持公平锁、可中断获取、锁超时、多条件变量（Condition）等更丰富的功能。简单场景用 synchronized 即可，需要高级特性时用 ReentrantLock。
+
+【考点】volatile 关键字的作用？它能保证原子性吗？
+【参考答案】volatile 保证可见性和有序性：写操作立即刷新到主内存，读操作从主内存读取，并通过内存屏障禁止指令重排序。但它不能保证原子性，例如 i++ 这类复合操作仍需要 synchronized 或 AtomicInteger（CAS）来保证。
+
+【考点】线程池的核心参数和拒绝策略有哪些？
+【参考答案】核心参数：corePoolSize 核心线程数、maximumPoolSize 最大线程数、keepAliveTime 空闲存活时间、workQueue 任务队列、ThreadFactory 线程工厂、RejectedExecutionHandler 拒绝策略。拒绝策略四种：AbortPolicy（抛异常，默认）、CallerRunsPolicy（调用者线程执行）、DiscardPolicy（静默丢弃）、DiscardOldestPolicy（丢弃最老任务）。
+
+## JVM
+
+【考点】JVM 内存区域如何划分？哪些区域会 OOM？
+【参考答案】线程私有：程序计数器、虚拟机栈（栈溢出 StackOverflowError）、本地方法栈；线程共享：堆（对象实例，OOM 主战场）、方法区/元空间（类元数据，元空间 OOM）。堆进一步分为新生代（Eden + 两个 Survivor，8:1:1）和老年代。
+
+【考点】垃圾回收算法有哪些？CMS 和 G1 的区别？
+【参考答案】基础算法：标记-清除（产生碎片）、标记-复制（新生代，浪费空间）、标记-整理（老年代，避免碎片）。CMS 以最短停顿为目标，标记-清除并发执行，缺点是会产生内存碎片、对 CPU 敏感；G1 将堆划分为多个 Region，以可预测的停顿时间为目标，优先回收垃圾最多的 Region，JDK 9 后成为默认收集器。
+
+## Spring
+
+【考点】Spring Bean 的生命周期？
+【参考答案】实例化 → 属性填充（依赖注入）→ 各种 Aware 接口回调 → BeanPostProcessor 前置处理 → 初始化（@PostConstruct、InitializingBean、init-method）→ BeanPostProcessor 后置处理 → 使用 → 销毁（@PreDestroy、DisposableBean、destroy-method）。
+
+【考点】Spring 事务失效的场景有哪些？
+【参考答案】常见失效场景：① 方法不是 public 修饰；② 同类内部方法自调用（this 调用绕过代理）；③ 异常被 try-catch 吞掉；④ 抛出的异常类型不是 RuntimeException 且 rollbackFor 未配置；⑤ 数据库引擎不支持事务（如 MyISAM）；⑥ 事务传播行为配置错误（如 PROPAGATION_NOT_SUPPORTED）。

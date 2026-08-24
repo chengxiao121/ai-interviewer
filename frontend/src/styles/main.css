@@ -1,0 +1,53 @@
+:root {
+  --color-primary: #4f46e5;
+  --color-danger: #ef4444;
+  --color-bg: #ffffff;
+  --color-bg-soft: #f5f6f8;
+  --color-bg-sidebar: #fafbfc;
+  --color-text: #1f2329;
+  --color-text-muted: #8a9099;
+  --color-border: #e5e7eb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #1a1d23;
+    --color-bg-soft: #242830;
+    --color-bg-sidebar: #15171c;
+    --color-text: #e6e7eb;
+    --color-text-muted: #8b919c;
+    --color-border: #2c3038;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  height: 100%;
+}
+
+/* 滚动条统一 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
