@@ -6,20 +6,12 @@ import com.alibaba.cloud.ai.graph.agent.flow.agent.ParallelAgent.ConcatenationMe
 import com.alibaba.cloud.ai.graph.agent.flow.agent.SequentialAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.SignalType;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 综合面试流水线（阶段 4.2 新增）——并行分析的编排器。
@@ -44,19 +36,13 @@ import java.util.concurrent.atomic.AtomicReference;
  * ─────────────────────────────────────────────────────────
  */
 @Service
-public class CombinedInterviewPipeline {
-
-    private static final Logger log = LoggerFactory.getLogger(CombinedInterviewPipeline.class);
+public class CombinedInterviewPipeline extends StreamingPipelineSupport {
 
     // 综合面试流水线：构造时 build 一次（并行分析 → 面试官），之后每次请求复用
     private final SequentialAgent pipeline;
     // 面试官
     private final InterviewAssistant interviewer;
-    // 短期记忆 + checkpoint：与 CodeReviewPipeline 同一套收尾逻辑
-    private final ChatMemory chatMemory;
-    private final MemorySaver memorySaver;
-    // 题库知识检索（阶段 4.2 重构）：RAG 前置检索收敛到 KnowledgeSearchService（Rule of Three 抽公共组件）
-    private final KnowledgeSearchService knowledgeSearchService;
+    // chatMemory / memorySaver / knowledgeSearchService 三个公共依赖由基类 StreamingPipelineSupport 持有
 
     public CombinedInterviewPipeline(CodeAnalyzerAgent codeAnalyzer,
                                      JdAnalyzerAgent jdAnalyzer,
@@ -65,6 +51,8 @@ public class CombinedInterviewPipeline {
                                      ChatMemory chatMemory,
                                      MemorySaver memorySaver,
                                      KnowledgeSearchService knowledgeSearchService) {
+
+        super(chatMemory, memorySaver, knowledgeSearchService);   // 三个公共依赖进基类
 
         // ── 内层：并行分析（三个分析官同时跑）──
         // mergeOutputKey：合并结果写入图状态的键（形式要件，物理传数据靠 DB + 状态消息，见类注释）
@@ -89,9 +77,6 @@ public class CombinedInterviewPipeline {
                 .build();
 
         this.interviewer = interviewer;
-        this.chatMemory = chatMemory;
-        this.memorySaver = memorySaver;
-        this.knowledgeSearchService = knowledgeSearchService;
 
         log.info("综合面试流水线构建完成：ParallelAgent(3 路分析) → Interviewer");
     }
@@ -115,52 +100,22 @@ public class CombinedInterviewPipeline {
      */
     public Flux<String> chat(String userMessage, String sessionId) {
 
-        // 组装初始消息：题库知识干预不了分析官（它们读的是 JD/简历/代码），但对面试官出题有帮助
-        List<Message> messages = new ArrayList<>();
-
-        String knowledgeContext = knowledgeSearchService.search(userMessage);
-        if (!knowledgeContext.isBlank()) {
-            messages.add(new SystemMessage(knowledgeContext));
-        }
-
-        messages.addAll(chatMemory.get(sessionId));
-        messages.add(new UserMessage(userMessage));
+        // 组装上下文（buildChatMessages，基类）+ 开跑流水线：
+        // 并行分析(JD/简历/代码) → 并行子图合并 → 面试官出题，流式吐出消息。
+        // 注意：三个分析官的输出文字也可能混进流，属预期行为（见后端架构文档风险 15）；
+        // 过滤成"助手说的话" + 收尾在基类完成。
+        log.info("综合面试流水线启动：sessionId={}，链路 = 并行分析(JD/简历/代码) → 面试官", sessionId);
 
         RunnableConfig config = RunnableConfig.builder().threadId(sessionId).build();
 
-        log.info("综合面试流水线启动：sessionId={}，链路 = 并行分析(JD/简历/代码) → 面试官", sessionId);
-
         Flux<Message> agentStream;
         try {
-            agentStream = pipeline.streamMessages(messages, config);
+            agentStream = pipeline.streamMessages(buildChatMessages(userMessage, sessionId), config);
         } catch (GraphRunnerException e) {
             log.error("综合面试流水线启动失败：sessionId={}", sessionId, e);
             return Flux.error(e);
         }
-
-        // 过滤成"助手说的话"（三个分析官的输出文字也可能混进流，属预期行为，见风险 15）
-        Flux<String> answer = agentStream
-                .filter(m -> m instanceof AssistantMessage)
-                .map(Message::getText)
-                .filter(t -> t != null && !t.isBlank());
-
-        AtomicReference<String> fullAnswer = new AtomicReference<>("");
-
-        // 收尾：写回短期窗口 + 释放 checkpoint（与 4.1 同一套）
-        return answer
-                .doOnNext(chunk -> fullAnswer.set(fullAnswer.get() + chunk))
-                .doFinally(signal -> {
-                    if (signal == SignalType.ON_COMPLETE) {
-                        chatMemory.add(sessionId, List.of(
-                                new UserMessage(userMessage),
-                                new AssistantMessage(fullAnswer.get())));
-                        try {
-                            memorySaver.release(config);
-                        } catch (Exception e) {
-                            log.warn("释放 checkpoint 失败：sessionId={}, {}", sessionId, e.getMessage());
-                        }
-                    }
-                });
+        return streamAssistantAnswers(agentStream, userMessage, config);
     }
 
 }

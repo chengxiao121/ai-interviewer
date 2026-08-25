@@ -5,21 +5,13 @@ import com.alibaba.cloud.ai.graph.agent.flow.agent.LlmRoutingAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import com.xiao.aiagent.repository.CodeProfileRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.SignalType;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 意图路由 Agent（阶段 4.2 新增）——多 Agent 系统的【统一入口 / 分诊台】。
@@ -58,9 +50,7 @@ import java.util.concurrent.atomic.AtomicReference;
  *   能确定答案的便宜事，不必每次都问 LLM。
  */
 @Service
-public class AgentRouter {
-
-    private static final Logger log = LoggerFactory.getLogger(AgentRouter.class);
+public class AgentRouter extends StreamingPipelineSupport {
 
     /**
      * 路由指令——给"分诊台 LLM"看的分类标准。
@@ -85,11 +75,7 @@ public class AgentRouter {
     private final InterviewAssistant interviewer;
     // 判断"该会话已分析过没"——复用快路径的开关
     private final CodeProfileRepository codeProfileRepository;
-    // 短期记忆 + checkpoint：与 4.1 流水线同一套收尾逻辑
-    private final ChatMemory chatMemory;
-    private final MemorySaver memorySaver;
-    // 题库知识检索（阶段 4.2 重构）：RAG 前置检索收敛到 KnowledgeSearchService（Rule of Three 抽公共组件）
-    private final KnowledgeSearchService knowledgeSearchService;
+    // chatMemory / memorySaver / knowledgeSearchService 三个公共依赖由基类 StreamingPipelineSupport 持有
 
     public AgentRouter(ChatModel chatModel,
                        CodeReviewPipeline codeReviewPipeline,
@@ -99,6 +85,8 @@ public class AgentRouter {
                        ChatMemory chatMemory,
                        MemorySaver memorySaver,
                        KnowledgeSearchService knowledgeSearchService) {
+
+        super(chatMemory, memorySaver, knowledgeSearchService);   // 三个公共依赖进基类
 
         // ── 组装"分诊台" ──
         // subAgents 里放的是"可以挂号的科室"。每个子 Agent 的 description 会被路由 LLM 看到，
@@ -120,9 +108,6 @@ public class AgentRouter {
 
         this.interviewer = interviewer;
         this.codeProfileRepository = codeProfileRepository;
-        this.chatMemory = chatMemory;
-        this.memorySaver = memorySaver;
-        this.knowledgeSearchService = knowledgeSearchService;
 
         log.info("意图路由 Agent 构建完成：3 路子 Agent（code-review-pipeline / combined-interview / interviewer），fallback=interviewer");
     }
@@ -153,60 +138,22 @@ public class AgentRouter {
             return interviewer.chat(userMessage, sessionId);
         }
 
-        // ── 第 1 步：组装"通用上下文"（见方法注释：只有一次机会）──
-        //   ① 题库知识（RAG 前置检索）→ system 消息
-        //   ② 短期窗口历史（chatMemory.get）→ 最近 60 条对话抄进来
-        //   ③ 用户本轮消息（路由 LLM 和子 Agent 都靠它判断/干活）
-        List<Message> messages = new ArrayList<>();
-
-        String knowledgeContext = knowledgeSearchService.search(userMessage);
-        if (!knowledgeContext.isBlank()) {
-            messages.add(new SystemMessage(knowledgeContext));
-        }
-
-        messages.addAll(chatMemory.get(sessionId));
-        messages.add(new UserMessage(userMessage));
+        // ── 组装上下文（buildChatMessages，基类）→ 开跑分诊图 ──
+        // 图内部先跑路由节点（LLM 选科室——路由决策是内部结构化输出，不会混进消息流），
+        // 再跑被选中子 Agent 的节点，流式吐出消息。过滤成"助手说的话" + 收尾在基类完成。
+        log.info("意图路由启动：sessionId={}，交给路由 LLM 分诊", sessionId);
 
         // threadId = sessionId：整张路由图（含被选中的子 Agent）共用同一把会话钥匙
         RunnableConfig config = RunnableConfig.builder().threadId(sessionId).build();
 
-        log.info("意图路由启动：sessionId={}，交给路由 LLM 分诊", sessionId);
-
-        // ── 第 2 步：开跑分诊图 ──
-        // 图内部先跑路由节点（LLM 选科室），再跑被选中子 Agent 的节点，流式吐出消息。
         Flux<Message> agentStream;
         try {
-            agentStream = router.streamMessages(messages, config);
+            agentStream = router.streamMessages(buildChatMessages(userMessage, sessionId), config);
         } catch (GraphRunnerException e) {
             log.error("意图路由启动失败：sessionId={}", sessionId, e);
             return Flux.error(e);
         }
-
-        // ── 第 3 步：过滤成"助手说的话"给前端 ──
-        // 路由决策是内部结构化输出（BeanOutputConverter 解析的名字列表），不会混进消息流；
-        // 流里的 AssistantMessage 就是被选中子 Agent 说的话（与 4.1 同一过滤套路）。
-        Flux<String> answer = agentStream
-                .filter(m -> m instanceof AssistantMessage)
-                .map(Message::getText)
-                .filter(t -> t != null && !t.isBlank());
-
-        AtomicReference<String> fullAnswer = new AtomicReference<>("");
-
-        // ── 第 4 步：收尾（与 4.1 流水线同一套）──
-        return answer
-                .doOnNext(chunk -> fullAnswer.set(fullAnswer.get() + chunk))
-                .doFinally(signal -> {
-                    if (signal == SignalType.ON_COMPLETE) {
-                        chatMemory.add(sessionId, List.of(
-                                new UserMessage(userMessage),
-                                new AssistantMessage(fullAnswer.get())));
-                        try {
-                            memorySaver.release(config);
-                        } catch (Exception e) {
-                            log.warn("释放 checkpoint 失败：sessionId={}, {}", sessionId, e.getMessage());
-                        }
-                    }
-                });
+        return streamAssistantAnswers(agentStream, userMessage, config);
     }
 
 }

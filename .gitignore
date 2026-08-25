@@ -24,6 +24,8 @@ data/
 # ===== 本地调试产物 =====
 # 接口验证 payload 与响应（含本地文件路径与 API 行为快照，不入库）
 .verify-payloads/
+# 4.2 课后回归测试临时目录（curl payload + 应用运行日志，不入库）
+test-http/
 # Maven 依赖树排查临时文件
 deps.txt
 deps2.txt

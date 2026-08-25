@@ -5,20 +5,12 @@ import com.alibaba.cloud.ai.graph.agent.flow.agent.SequentialAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import com.xiao.aiagent.repository.CodeProfileRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.SignalType;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
 /**
@@ -39,9 +31,7 @@ import java.util.regex.Pattern;
  *   省一次 LLM 分析调用。这就是第 1 步设计决策在这里的兑现。
  */
 @Service
-public class CodeReviewPipeline {
-
-    private static final Logger log = LoggerFactory.getLogger(CodeReviewPipeline.class);
+public class CodeReviewPipeline extends StreamingPipelineSupport {
 
     // 双 Agent 流水线：构造时 build 一次，之后每次请求复用
     private final SequentialAgent pipeline;
@@ -49,11 +39,7 @@ public class CodeReviewPipeline {
     private final InterviewAssistant interviewer;
     // 判断"该会话分析过没"——决定走流水线还是复用路径
     private final CodeProfileRepository codeProfileRepository;
-    // 短期记忆 + checkpoint：与 InterviewAssistant.chat() 同一套收尾逻辑
-    private final ChatMemory chatMemory;
-    private final MemorySaver memorySaver;
-    // 题库知识检索（阶段 4.2 重构）：RAG 前置检索收敛到 KnowledgeSearchService（Rule of Three 抽公共组件）
-    private final KnowledgeSearchService knowledgeSearchService;
+    // chatMemory / memorySaver / knowledgeSearchService 三个公共依赖由基类 StreamingPipelineSupport 持有
 
     public CodeReviewPipeline(CodeAnalyzerAgent codeAnalyzer,
                               InterviewAssistant interviewer,
@@ -61,6 +47,8 @@ public class CodeReviewPipeline {
                               ChatMemory chatMemory,
                               MemorySaver memorySaver,
                               KnowledgeSearchService knowledgeSearchService) {
+
+        super(chatMemory, memorySaver, knowledgeSearchService);   // 三个公共依赖进基类
 
         // ── 组装双 Agent 流水线 ──
         // subAgents 里的顺序 = 执行顺序：先分析、后面试。
@@ -74,9 +62,6 @@ public class CodeReviewPipeline {
 
         this.interviewer = interviewer;
         this.codeProfileRepository = codeProfileRepository;
-        this.chatMemory = chatMemory;
-        this.memorySaver = memorySaver;
-        this.knowledgeSearchService = knowledgeSearchService;
     }
 
     /**
@@ -115,60 +100,24 @@ public class CodeReviewPipeline {
         }
 
         // ── 路径 B：流水线路径（首次分析）──
-        // 组装初始消息（与 InterviewAssistant.chat() 同套路）：
-        //   ① RAG 题库知识 → system 消息（面试官用得上；分析 Agent 不受影响，它专注读代码）
-        //   ② 短期窗口历史 → 面试官要的上下文
-        //   ③ 用户消息（含文件路径，分析 Agent 从中提取路径调 read_file）
-        List<Message> messages = new ArrayList<>();
-
-        String knowledgeContext = knowledgeSearchService.search(userMessage);
-        if (!knowledgeContext.isBlank()) {
-            messages.add(new SystemMessage(knowledgeContext));
-        }
-
-        messages.addAll(chatMemory.get(sessionId));
-        messages.add(new UserMessage(userMessage));
+        // 组装上下文（buildChatMessages，基类）+ 开跑流水线：
+        // 先分析 Agent（读代码→落库），再面试官 Agent（取清单→出题），流式吐出消息。
+        // 注意：流水线会吐出两个 Agent 的消息（含分析 Agent 的输出）——验收实测属预期行为；
+        // 过滤成"助手说的话" + 收尾在基类完成。
+        log.info("代码评审双 Agent 流水线启动：sessionId={}，链路 = 代码分析 Agent → 面试官 Agent", sessionId);
 
         // threadId = sessionId：子 Agent 的工具（saveCodeProfile/getCodeFacts/scoreRecord）
         // 都从框架注入的 RunnableConfig 取它做会话隔离，整条流水线共用同一把钥匙
         RunnableConfig config = RunnableConfig.builder().threadId(sessionId).build();
 
-        log.info("代码评审双 Agent 流水线启动：sessionId={}，链路 = 代码分析 Agent → 面试官 Agent", sessionId);
-
         Flux<Message> agentStream;
         try {
-            // 开跑流水线：先分析 Agent（读代码→落库），再面试官 Agent（取清单→出题）
-            agentStream = pipeline.streamMessages(messages, config);
+            agentStream = pipeline.streamMessages(buildChatMessages(userMessage, sessionId), config);
         } catch (GraphRunnerException e) {
             log.error("双 Agent 流水线启动失败：sessionId={}", sessionId, e);
             return Flux.error(e);
         }
-
-        // 把流水线吐出的消息流过滤成"助手说的文字"给前端。
-        // 注意：流水线会吐出两个 Agent 的消息（含分析 Agent 的输出），
-        // 分析 Agent 的 prompt 已要求"只调工具、少输出文字"，流式形态在第 6 步验收时实测确认。
-        Flux<String> answer = agentStream
-                .filter(m -> m instanceof AssistantMessage)
-                .map(Message::getText)
-                .filter(t -> t != null && !t.isBlank());
-
-        AtomicReference<String> fullAnswer = new AtomicReference<>("");
-
-        // 收尾：与 InterviewAssistant.chat() 同一套——写回短期窗口 + 释放 checkpoint
-        return answer
-                .doOnNext(chunk -> fullAnswer.set(fullAnswer.get() + chunk))
-                .doFinally(signal -> {
-                    if (signal == SignalType.ON_COMPLETE) {
-                        chatMemory.add(sessionId, List.of(
-                                new UserMessage(userMessage),
-                                new AssistantMessage(fullAnswer.get())));
-                        try {
-                            memorySaver.release(config);
-                        } catch (Exception e) {
-                            log.warn("释放 checkpoint 失败：sessionId={}, {}", sessionId, e.getMessage());
-                        }
-                    }
-                });
+        return streamAssistantAnswers(agentStream, userMessage, config);
     }
 
     /** 匹配文件扩展名（判断消息里是否提到代码文件） */
