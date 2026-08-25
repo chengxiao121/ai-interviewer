@@ -1,7 +1,5 @@
 package com.xiao.aiagent.tools;
 
-import com.alibaba.cloud.ai.graph.RunnableConfig;
-import com.alibaba.cloud.ai.graph.agent.tools.ToolContextHelper;
 import com.xiao.aiagent.entity.CodeProfile;
 import com.xiao.aiagent.entity.ScoreRecord;
 import com.xiao.aiagent.repository.CodeProfileRepository;
@@ -68,10 +66,8 @@ public class InterviewTools {
             @ToolParam(description = "面试官点评或改进建议") String feedback,
             ToolContext toolContext) {
 
-        // 阶段 3：从框架注入的 RunnableConfig 取 threadId 作为 sessionId（与 InterviewAssistant.chat() 里写入的配对）
-        String sessionId = ToolContextHelper.getConfig(toolContext)
-                .flatMap(RunnableConfig::threadId)
-                .orElse("unknown");
+        // 会话 key 取【根 sessionId】（子图会给 threadId 自动加 _subgraph_ 后缀，详见 SessionKeys）
+        String sessionId = SessionKeys.rootSessionId(toolContext);
         log.info("工具调用 scoreRecord：sessionId={}, topic={}, score={}", sessionId, topic, score);
 
         // 防御性校验：评分必须在 0~10，越界值钳制到边界（LLM 打分偶尔会给出非法值，避免脏数据污染统计）
@@ -115,10 +111,8 @@ public class InterviewTools {
     @Tool(description = "查询某会话的答题统计：各考点的答题数、平均分、最低分，并列出薄弱考点。用户问薄弱考点或统计时调用。")
     public String questionStats(ToolContext toolContext) {
 
-        // 阶段 3：sessionId 取自框架注入的 RunnableConfig.threadId（与 chat() 里写入的配对）
-        String sessionId = ToolContextHelper.getConfig(toolContext)
-                .flatMap(RunnableConfig::threadId)
-                .orElse("unknown");
+        // 会话 key 取【根 sessionId】（子图会给 threadId 自动加 _subgraph_ 后缀，详见 SessionKeys）
+        String sessionId = SessionKeys.rootSessionId(toolContext);
         log.info("工具调用 questionStats：sessionId={}", sessionId);
 
         List<Object[]> rows = scoreRecordRepository.aggregateByTopic(sessionId);
@@ -164,10 +158,8 @@ public class InterviewTools {
     @Tool(description = "获取代码评审面试的事实清单。代码评审面试（求职者分享代码让你针对其实现提问）时调用，取回代码分析结果，基于清单中的技术栈、实现细节、风险点、可追问点出题。")
     public String getCodeFacts(ToolContext toolContext) {
 
-        // sessionId 取自框架注入的 RunnableConfig.threadId（与其他工具同一套机制）
-        String sessionId = ToolContextHelper.getConfig(toolContext)
-                .flatMap(RunnableConfig::threadId)
-                .orElse("unknown");
+        // 会话 key 取【根 sessionId】（子图会给 threadId 自动加 _subgraph_ 后缀，详见 SessionKeys）
+        String sessionId = SessionKeys.rootSessionId(toolContext);
         log.info("工具调用 getCodeFacts：sessionId={}", sessionId);
 
         List<CodeProfile> profiles = codeProfileRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
@@ -175,9 +167,10 @@ public class InterviewTools {
             return "当前会话还没有代码分析记录，请按普通面试流程出题。";
         }
 
-        StringBuilder sb = new StringBuilder("代码分析事实清单如下：\n\n");
+        StringBuilder sb = new StringBuilder("分析事实清单如下（含 JD/简历/代码三类资料）：\n\n");
         for (CodeProfile profile : profiles) {
-            sb.append("文件：").append(profile.getFilePath()).append("\n")
+            sb.append("资料类型：").append(profile.getProfileType())
+              .append("；文件：").append(profile.getFilePath()).append("\n")
               .append(profile.getFactsJson()).append("\n\n");
         }
         return sb.toString();

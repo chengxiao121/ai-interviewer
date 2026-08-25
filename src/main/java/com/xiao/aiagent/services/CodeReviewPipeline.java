@@ -12,9 +12,6 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.SignalType;
@@ -55,15 +52,15 @@ public class CodeReviewPipeline {
     // 短期记忆 + checkpoint：与 InterviewAssistant.chat() 同一套收尾逻辑
     private final ChatMemory chatMemory;
     private final MemorySaver memorySaver;
-    // 题库向量库：RAG 前置检索（与 InterviewAssistant.searchKnowledge 同逻辑）
-    private final VectorStore knowledgeStore;
+    // 题库知识检索（阶段 4.2 重构）：RAG 前置检索收敛到 KnowledgeSearchService（Rule of Three 抽公共组件）
+    private final KnowledgeSearchService knowledgeSearchService;
 
     public CodeReviewPipeline(CodeAnalyzerAgent codeAnalyzer,
                               InterviewAssistant interviewer,
                               CodeProfileRepository codeProfileRepository,
                               ChatMemory chatMemory,
                               MemorySaver memorySaver,
-                              VectorStore vectorStore) {
+                              KnowledgeSearchService knowledgeSearchService) {
 
         // ── 组装双 Agent 流水线 ──
         // subAgents 里的顺序 = 执行顺序：先分析、后面试。
@@ -79,7 +76,22 @@ public class CodeReviewPipeline {
         this.codeProfileRepository = codeProfileRepository;
         this.chatMemory = chatMemory;
         this.memorySaver = memorySaver;
-        this.knowledgeStore = vectorStore;
+        this.knowledgeSearchService = knowledgeSearchService;
+    }
+
+    /**
+     * 暴露内部的 SequentialAgent 给上层编排器（阶段 4.2 新增）。
+     *
+     * 为什么 4.1 不需要、4.2 需要？
+     *   4.1 时本类就是最外层入口，Controller 直接调 codeReviewChat()；
+     *   4.2 起本类降级为 AgentRouter（LlmRoutingAgent）的一个【子 Agent】，
+     *   LlmRoutingAgent.builder().subAgents(...) 要求传 Agent 类型实例，
+     *   所以要把拼好的流水线图透出去。
+     * 与 InterviewAssistant.getAgent() / CodeAnalyzerAgent.getAgent() 同一模式：
+     *   Service 包装管理生命周期和业务逻辑，需要被编排时透出 Agent。
+     */
+    public SequentialAgent getPipeline() {
+        return pipeline;
     }
 
     /**
@@ -109,7 +121,7 @@ public class CodeReviewPipeline {
         //   ③ 用户消息（含文件路径，分析 Agent 从中提取路径调 read_file）
         List<Message> messages = new ArrayList<>();
 
-        String knowledgeContext = searchKnowledge(userMessage);
+        String knowledgeContext = knowledgeSearchService.search(userMessage);
         if (!knowledgeContext.isBlank()) {
             messages.add(new SystemMessage(knowledgeContext));
         }
@@ -199,28 +211,6 @@ public class CodeReviewPipeline {
             }
         }
         return false;
-    }
-
-    /**
-     * 题库 RAG 前置检索（与 InterviewAssistant.searchKnowledge 同逻辑）。
-     * 说明：这里重复了 InterviewAssistant 的私有方法，是因为编排器要独立组装初始消息。
-     * 两处逻辑一致、代码量小，暂不抽公共组件（保持 4.1 结构清晰，重构留待需要时）。
-     */
-    private String searchKnowledge(String userMessage) {
-        List<Document> hits = knowledgeStore.similaritySearch(
-                SearchRequest.builder()
-                        .query(userMessage)
-                        .topK(3)
-                        .similarityThreshold(0.7)
-                        .build());
-        if (hits == null || hits.isEmpty()) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder("【题库知识】以下内容来自面试题库，出题时请优先参考：\n");
-        for (Document d : hits) {
-            sb.append("- ").append(d.getText()).append("\n");
-        }
-        return sb.toString();
     }
 
 }

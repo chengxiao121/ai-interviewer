@@ -16,10 +16,7 @@ import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.document.Document;
 import org.springframework.ai.tool.ToolCallbackProvider;
-import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -70,6 +67,9 @@ public class InterviewAssistant {
                代码分析事实清单，基于清单中的技术栈、实现细节、风险点、可追问点出题追问。
                清单信息不够时，可用文件读取工具（read_file/list_directory/search_files）补充查看代码。
                注意：你只能读取文件，不要修改或删除求职者的任何文件。
+            8. 求职者只是寒暄、闲聊或表达情绪（如"你好""好难啊""今天天气不错"）时：
+               简短友好地回应一两句，然后自然引导回面试主题，不要展开闲聊。
+               （阶段 4.2：本系统不设独立闲聊 Agent，闲聊由面试官吸收，避免第三路误路由）
 
             输出格式要求（必须严格遵守）：
             - 题目用 Markdown 标题单独成行，例如：### 第 1 题：线程池（Java 并发）
@@ -96,8 +96,8 @@ public class InterviewAssistant {
     // Agent 运行状态保存器：每轮循环的"记录本快照"按 threadId 隔离。
     // 每轮跑完会 release() 释放，防止下轮把上一轮整本记录（旧消息）重复带进上下文
     private final MemorySaver memorySaver;
-    // 题库向量库（自动装配的 ai-agent-index）：供 searchKnowledge() 做前置 RAG 检索用
-    private final VectorStore knowledgeStore;
+    // 题库知识检索（阶段 4.2 重构）：RAG 前置检索收敛到 KnowledgeSearchService（Rule of Three 抽公共组件）
+    private final KnowledgeSearchService knowledgeSearchService;
     // 代码事实清单仓储（阶段 4.1 新增）：双 Agent 流水线里，分析 Agent 把清单落这表，
     // 面试官从这里按 sessionId 取清单出题。这就是 Agent 间"落库传递数据契约"的读取端
     private final CodeProfileRepository codeProfileRepository;
@@ -105,7 +105,7 @@ public class InterviewAssistant {
     public InterviewAssistant(ChatModel chatModel,
                               InterviewTools interviewTools,
                               ObjectProvider<ToolCallbackProvider> mcpToolCallbackProvider,
-                              VectorStore vectorStore,
+                              KnowledgeSearchService knowledgeSearchService,
                               ChatMemory chatMemory,
                               MemorySaver memorySaver,
                               CodeProfileRepository codeProfileRepository) {
@@ -139,7 +139,7 @@ public class InterviewAssistant {
         this.agent = builder.build();
         this.chatMemory = chatMemory;
         this.memorySaver = memorySaver;
-        this.knowledgeStore = vectorStore;
+        this.knowledgeSearchService = knowledgeSearchService;
         this.codeProfileRepository = codeProfileRepository;
     }
 
@@ -182,7 +182,7 @@ public class InterviewAssistant {
             messages.add(new SystemMessage(codeFactsContext));
         }
 
-        String knowledgeContext = searchKnowledge(userMessage);
+        String knowledgeContext = knowledgeSearchService.search(userMessage);
         if (!knowledgeContext.isBlank()) {
             messages.add(new SystemMessage(knowledgeContext));
         }
@@ -259,28 +259,11 @@ public class InterviewAssistant {
             return "";
         }
 
-        StringBuilder sb = new StringBuilder("【代码评审面试背景】以下是对候选人代码的分析结果（JSON），请基于此出题追问：\n\n");
+        StringBuilder sb = new StringBuilder("【面试官物料】以下是对候选人资料的分析结果（含代码/JD/简历，JSON），请基于此出题追问：\n\n");
         for (CodeProfile profile : profiles) {
-            sb.append("文件：").append(profile.getFilePath()).append("\n")
+            sb.append("资料类型：").append(profile.getProfileType())
+              .append("；文件：").append(profile.getFilePath()).append("\n")
               .append(profile.getFactsJson()).append("\n\n");
-        }
-        return sb.toString();
-    }
-
-    /** 题库 RAG 前置检索：只基于用户本轮消息检索一次，结果注入为 system 消息（替代 QuestionAnswerAdvisor） */
-    private String searchKnowledge(String userMessage) {
-        List<Document> hits = knowledgeStore.similaritySearch(
-                SearchRequest.builder()
-                        .query(userMessage)
-                        .topK(3)
-                        .similarityThreshold(0.7)
-                        .build());
-        if (hits == null || hits.isEmpty()) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder("【题库知识】以下内容来自面试题库，出题时请优先参考：\n");
-        for (Document d : hits) {
-            sb.append("- ").append(d.getText()).append("\n");
         }
         return sb.toString();
     }

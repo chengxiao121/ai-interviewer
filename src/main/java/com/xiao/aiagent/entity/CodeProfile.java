@@ -38,6 +38,15 @@ public class CodeProfile {
     private String filePath;
 
     /**
+     * 资料类型（阶段 4.2 新增）：CODE=代码 / JD=岗位描述 / RESUME=简历。
+     * 为什么 JD/简历分析与代码分析共用一张表：三者是同构的——都是"读资料 → 产出结构化事实清单"，
+     * 共用一张表，用本字段区分类型，面试官取清单时一次全取，无需三张表三套读写。
+     * 列定义带默认值 'CODE'：存量旧数据（4.2 之前只有代码清单）自动归为 CODE，不炸迁移。
+     */
+    @Column(length = 16, columnDefinition = "varchar(16) default 'CODE'")
+    private String profileType;
+
+    /**
      * 事实清单 JSON 全文（数据契约本体）。
      * 结构由 CodeAnalyzerAgent 的 prompt 约定，典型字段：
      *   techStack / designPatterns / implementationDetails / riskPoints / followUpPoints
@@ -51,9 +60,10 @@ public class CodeProfile {
     private LocalDateTime createdAt;
 
     /** 全参构造（@Data 不生成） */
-    public CodeProfile(String sessionId, String filePath, String factsJson, LocalDateTime createdAt) {
+    public CodeProfile(String sessionId, String filePath, String profileType, String factsJson, LocalDateTime createdAt) {
         this.sessionId = sessionId;
         this.filePath = filePath;
+        this.profileType = profileType;
         this.factsJson = factsJson;
         this.createdAt = createdAt;
     }
