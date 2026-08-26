@@ -6,6 +6,7 @@ import com.alibaba.cloud.ai.graph.agent.flow.agent.ParallelAgent.ConcatenationMe
 import com.alibaba.cloud.ai.graph.agent.flow.agent.SequentialAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
+import com.xiao.aiagent.tools.SessionKeys;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.stereotype.Service;
@@ -50,9 +51,10 @@ public class CombinedInterviewPipeline extends StreamingPipelineSupport {
                                      InterviewAssistant interviewer,
                                      ChatMemory chatMemory,
                                      MemorySaver memorySaver,
-                                     KnowledgeSearchService knowledgeSearchService) {
+                                     KnowledgeSearchService knowledgeSearchService,
+                                     WeaknessProfileService weaknessProfileService) {
 
-        super(chatMemory, memorySaver, knowledgeSearchService);   // 三个公共依赖进基类
+        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService);   // 四个公共依赖进基类
 
         // ── 内层：并行分析（三个分析官同时跑）──
         // mergeOutputKey：合并结果写入图状态的键（形式要件，物理传数据靠 DB + 状态消息，见类注释）
@@ -97,8 +99,9 @@ public class CombinedInterviewPipeline extends StreamingPipelineSupport {
      *
      * @param userMessage 用户消息（需指出 JD/简历的位置或贴出文本 + 代码文件路径）
      * @param sessionId   会话 id（threadId，隔离清单/记忆/checkpoint）
+     * @param candidateId 候选人 id（4.3 新增）：写入 config metadata，供工具跨会话聚合
      */
-    public Flux<String> chat(String userMessage, String sessionId) {
+    public Flux<String> chat(String userMessage, String sessionId, String candidateId) {
 
         // 组装上下文（buildChatMessages，基类）+ 开跑流水线：
         // 并行分析(JD/简历/代码) → 并行子图合并 → 面试官出题，流式吐出消息。
@@ -106,11 +109,16 @@ public class CombinedInterviewPipeline extends StreamingPipelineSupport {
         // 过滤成"助手说的话" + 收尾在基类完成。
         log.info("综合面试流水线启动：sessionId={}，链路 = 并行分析(JD/简历/代码) → 面试官", sessionId);
 
-        RunnableConfig config = RunnableConfig.builder().threadId(sessionId).build();
+        // threadId = sessionId：子 Agent 的工具都从框架注入的 RunnableConfig 取它做会话隔离；
+        // metadata 写入 candidateId（4.3）：工具经 SessionKeys.candidateId 从同一 config 读回（"写端"）
+        RunnableConfig config = RunnableConfig.builder()
+                .threadId(sessionId)
+                .addMetadata(SessionKeys.CANDIDATE_ID_KEY, candidateId)
+                .build();
 
         Flux<Message> agentStream;
         try {
-            agentStream = pipeline.streamMessages(buildChatMessages(userMessage, sessionId), config);
+            agentStream = pipeline.streamMessages(buildChatMessages(userMessage, sessionId, candidateId), config);
         } catch (GraphRunnerException e) {
             log.error("综合面试流水线启动失败：sessionId={}", sessionId, e);
             return Flux.error(e);

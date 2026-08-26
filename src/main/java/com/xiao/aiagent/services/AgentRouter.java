@@ -5,6 +5,7 @@ import com.alibaba.cloud.ai.graph.agent.flow.agent.LlmRoutingAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import com.xiao.aiagent.repository.CodeProfileRepository;
+import com.xiao.aiagent.tools.SessionKeys;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
@@ -84,9 +85,10 @@ public class AgentRouter extends StreamingPipelineSupport {
                        CodeProfileRepository codeProfileRepository,
                        ChatMemory chatMemory,
                        MemorySaver memorySaver,
-                       KnowledgeSearchService knowledgeSearchService) {
+                       KnowledgeSearchService knowledgeSearchService,
+                       WeaknessProfileService weaknessProfileService) {
 
-        super(chatMemory, memorySaver, knowledgeSearchService);   // 三个公共依赖进基类
+        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService);   // 四个公共依赖进基类
 
         // ── 组装"分诊台" ──
         // subAgents 里放的是"可以挂号的科室"。每个子 Agent 的 description 会被路由 LLM 看到，
@@ -125,8 +127,9 @@ public class AgentRouter extends StreamingPipelineSupport {
      *
      * @param userMessage 用户消息
      * @param sessionId   会话 id（threadId，隔离记忆/清单/checkpoint）
+     * @param candidateId 候选人 id（4.3 新增）：写入 config metadata，供工具跨会话聚合
      */
-    public Flux<String> chat(String userMessage, String sessionId) {
+    public Flux<String> chat(String userMessage, String sessionId, String candidateId) {
 
         // ── 快路径：4.1 落库复用的保留 ──
         // 同会话已分析过代码 + 用户仍是代码评审意图 → 直接进面试官（清单 loadCodeFacts 前置注入）。
@@ -135,7 +138,7 @@ public class AgentRouter extends StreamingPipelineSupport {
         if (codeProfileRepository.existsBySessionId(sessionId)
                 && CodeReviewPipeline.isCodeReviewRequest(userMessage)) {
             log.info("会话 {} 已有代码分析记录且用户仍请求代码评审，走复用快路径（跳过分析、跳过路由）", sessionId);
-            return interviewer.chat(userMessage, sessionId);
+            return interviewer.chat(userMessage, sessionId, candidateId);
         }
 
         // ── 组装上下文（buildChatMessages，基类）→ 开跑分诊图 ──
@@ -143,12 +146,16 @@ public class AgentRouter extends StreamingPipelineSupport {
         // 再跑被选中子 Agent 的节点，流式吐出消息。过滤成"助手说的话" + 收尾在基类完成。
         log.info("意图路由启动：sessionId={}，交给路由 LLM 分诊", sessionId);
 
-        // threadId = sessionId：整张路由图（含被选中的子 Agent）共用同一把会话钥匙
-        RunnableConfig config = RunnableConfig.builder().threadId(sessionId).build();
+        // threadId = sessionId：整张路由图（含被选中的子 Agent）共用同一把会话钥匙；
+        // metadata 写入 candidateId（4.3）：工具经 SessionKeys.candidateId 从同一 config 读回（"写端"）
+        RunnableConfig config = RunnableConfig.builder()
+                .threadId(sessionId)
+                .addMetadata(SessionKeys.CANDIDATE_ID_KEY, candidateId)
+                .build();
 
         Flux<Message> agentStream;
         try {
-            agentStream = router.streamMessages(buildChatMessages(userMessage, sessionId), config);
+            agentStream = router.streamMessages(buildChatMessages(userMessage, sessionId, candidateId), config);
         } catch (GraphRunnerException e) {
             log.error("意图路由启动失败：sessionId={}", sessionId, e);
             return Flux.error(e);

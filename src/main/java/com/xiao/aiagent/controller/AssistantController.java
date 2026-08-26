@@ -1,6 +1,7 @@
 package com.xiao.aiagent.controller;
 
 import com.xiao.aiagent.services.AgentRouter;
+import com.xiao.aiagent.tools.SessionKeys;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -37,11 +38,15 @@ public class AssistantController {
         // Spring 的 ServerSentEventHttpMessageWriter#writeStringData 对 data 字段本身就会
         // 把 \n 转成 "\ndata:" 续行。前端 sse.ts 按 SSE 规范把同帧多条 data: 行用 \n 拼接即可还原换行。
         // 若在这里再手动转义一次 = 双重转义，流里会混入多余的 "data:" 文字。
-        return agentRouter.chat(request.userMessage(), request.sessionId());
+        // candidateId 归一化（4.3）：未传/空串 → 默认候选人 "default"（轻量方案：固定值即跨会话聚合可用）
+        String candidateId = (request.candidateId() == null || request.candidateId().isBlank())
+                ? SessionKeys.DEFAULT_CANDIDATE_ID
+                : request.candidateId();
+        return agentRouter.chat(request.userMessage(), request.sessionId(), candidateId);
     }
 
     /** chat 请求体 */
-    public record ChatRequest(String userMessage, String sessionId) {
+    public record ChatRequest(String userMessage, String sessionId, String candidateId) {
     }
 
 }

@@ -24,6 +24,16 @@ public class ScoreRecord {
     @Column(nullable = false, length = 64)
     private String sessionId;
 
+    /**
+     * 候选人 id（4.3 新增）：同一求职者跨多场面试共用，用于【跨会话】薄弱点聚合。
+     * 与 sessionId 的区别：sessionId 是"这场面试"的上下文隔离键，candidateId 是"这个人"的身份键，
+     * 一个候选人可有多场会话（一对多），两键各司其职同时落库。
+     * 不设 NOT NULL：存量评分记录没有该列的值，ddl-auto=update 直接加 NOT NULL 列会被 PostgreSQL
+     * 以"存量行为 NULL"拒绝；新建记录一定写入（工具侧兜底默认值），老数据的 NULL 在查询时用 COALESCE 归到 "default"。
+     */
+    @Column(length = 64)
+    private String candidateId;
+
     /** 考点（如 Java并发 / Redis持久化 / MySQL索引），用于按考点聚合统计薄弱点 */
     @Column(nullable = false, length = 64)
     private String topic;
@@ -49,9 +59,10 @@ public class ScoreRecord {
     private LocalDateTime createdAt;
 
     /** 全参构造（@Data 不生成） */
-    public ScoreRecord(String sessionId, String topic, String question, String answer,
+    public ScoreRecord(String sessionId, String candidateId, String topic, String question, String answer,
                        Double score, String feedback, LocalDateTime createdAt) {
         this.sessionId = sessionId;
+        this.candidateId = candidateId;
         this.topic = topic;
         this.question = question;
         this.answer = answer;

@@ -4,6 +4,7 @@ import com.xiao.aiagent.entity.CodeProfile;
 import com.xiao.aiagent.entity.ScoreRecord;
 import com.xiao.aiagent.repository.CodeProfileRepository;
 import com.xiao.aiagent.repository.ScoreRecordRepository;
+import com.xiao.aiagent.services.WeaknessProfileService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ToolContext;
@@ -32,11 +33,15 @@ public class InterviewTools {
 
     private final ScoreRecordRepository scoreRecordRepository;
     private final CodeProfileRepository codeProfileRepository;
+    /** 跨会话薄弱点回顾（4.3 新增）：薄弱点摘要的唯一数据源，工具与开场注入共用同一段文本 */
+    private final WeaknessProfileService weaknessProfileService;
 
     public InterviewTools(ScoreRecordRepository scoreRecordRepository,
-                          CodeProfileRepository codeProfileRepository) {
+                          CodeProfileRepository codeProfileRepository,
+                          WeaknessProfileService weaknessProfileService) {
         this.scoreRecordRepository = scoreRecordRepository;
         this.codeProfileRepository = codeProfileRepository;
+        this.weaknessProfileService = weaknessProfileService;
     }
 
     /**
@@ -68,7 +73,11 @@ public class InterviewTools {
 
         // 会话 key 取【根 sessionId】（子图会给 threadId 自动加 _subgraph_ 后缀，详见 SessionKeys）
         String sessionId = SessionKeys.rootSessionId(toolContext);
-        log.info("工具调用 scoreRecord：sessionId={}, topic={}, score={}", sessionId, topic, score);
+        // 候选人 id 取【RunnableConfig metadata】（4.3 新增）：跨会话薄弱点聚合的身份维度，
+        // 与 sessionId 一起落库——sessionId 管"这场面试"，candidateId 管"这个人"（详见 SessionKeys）
+        String candidateId = SessionKeys.candidateId(toolContext);
+        log.info("工具调用 scoreRecord：sessionId={}, candidateId={}, topic={}, score={}",
+                sessionId, candidateId, topic, score);
 
         // 防御性校验：评分必须在 0~10，越界值钳制到边界（LLM 打分偶尔会给出非法值，避免脏数据污染统计）
         double validScore = Math.max(0, Math.min(10, score));
@@ -80,6 +89,7 @@ public class InterviewTools {
         Optional<ScoreRecord> existing = scoreRecordRepository.findBySessionIdAndQuestion(sessionId, question);
         if (existing.isPresent()) {
             ScoreRecord record = existing.get();
+            record.setCandidateId(candidateId);   // 存量记录也补上候选人维度（老数据可能为 NULL）
             record.setTopic(topic);
             record.setAnswer(answer);
             record.setScore(validScore);
@@ -92,7 +102,7 @@ public class InterviewTools {
         }
 
         ScoreRecord record = new ScoreRecord(
-                sessionId, topic, question, answer, validScore, feedback, LocalDateTime.now());
+                sessionId, candidateId, topic, question, answer, validScore, feedback, LocalDateTime.now());
         ScoreRecord saved = scoreRecordRepository.save(record);
 
         log.info("评分落库成功：id={}, topic={}, score={}", saved.getId(), topic, validScore);
@@ -139,6 +149,33 @@ public class InterviewTools {
             sb.append("薄弱考点（平均分低于 6 分）：").append(String.join("、", weakTopics));
         }
         return sb.toString();
+    }
+
+    /**
+     * 查询某候选人【跨会话】的答题统计（4.3 新增）——跨会话薄弱点回顾。
+     * 按候选人 id 聚合他/她【所有场次】的评分：各考点答题数、平均分、最低分，标注平均分低于 6 分的薄弱考点。
+     * 与 questionStats 的区别：questionStats 看"这场面试"，本工具看"这个人"（跨多场面试）。
+     * 面试官在此类场景调用：
+     *   - 新的一场面试开始，开场时回顾该候选人历史薄弱点，重点考察；
+     *   - 用户说「继续上次的面试」「上次哪里没答好」等。
+     * 实现上委托 WeaknessProfileService（4.3 单一事实来源）：模型看到的文案 = 开场注入的文案 = 同一段话。
+     *
+     * @param toolContext 工具上下文，candidateId 由服务端从 RunnableConfig metadata 注入
+     * @return 跨会话聚合统计文本，供 LLM 向用户转述 / 注入开场考察重点
+     */
+    @Tool(description = "查询某候选人跨会话的答题统计（按候选人聚合所有场次的评分）：各考点答题数、平均分、最低分并标注薄弱考点。新面试开场回顾历史薄弱点、或用户说继续上次面试时调用。")
+    public String getWeaknessProfile(ToolContext toolContext) {
+
+        // 候选人 id 取【RunnableConfig metadata】（入口写入，详见 SessionKeys）
+        String candidateId = SessionKeys.candidateId(toolContext);
+        log.info("工具调用 getWeaknessProfile：candidateId={}", candidateId);
+
+        // 委托 WeaknessProfileService：聚合 + 格式化唯一实现（与开场注入共用），无记录时 loadProfile 返回空串
+        String profile = weaknessProfileService.loadProfile(candidateId);
+        if (profile.isBlank()) {
+            return String.format("候选人 %s 还没有任何评分记录，先回答几道题拿到评分后再来查询薄弱点。", candidateId);
+        }
+        return profile;
     }
 
     /**

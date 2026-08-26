@@ -8,6 +8,7 @@ import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import com.xiao.aiagent.entity.CodeProfile;
 import com.xiao.aiagent.repository.CodeProfileRepository;
 import com.xiao.aiagent.tools.InterviewTools;
+import com.xiao.aiagent.tools.SessionKeys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -70,6 +71,13 @@ public class InterviewAssistant {
             8. 求职者只是寒暄、闲聊或表达情绪（如"你好""好难啊""今天天气不错"）时：
                简短友好地回应一两句，然后自然引导回面试主题，不要展开闲聊。
                （阶段 4.2：本系统不设独立闲聊 Agent，闲聊由面试官吸收，避免第三路误路由）
+            9. 若系统消息中带有【跨会话薄弱点回顾】信息（该候选人历次面试的答题统计）：
+               面试开始时必须先主动向求职者点明其中的薄弱考点（如"上次你 Redis 持久化答得不够好，
+               这次我们重点考察"），并把薄弱考点列为优先出题方向。
+               求职者说「继续上次的面试」「上次哪里没答好」等时，调用 getWeaknessProfile 工具
+               取回跨会话历史薄弱点，再按同样方式开场与考察。
+               注意：上下文里没有【跨会话薄弱点回顾】时，不要虚构或凭空编造求职者的历史薄弱点。
+               （阶段 4.3：跨会话薄弱点回顾 = 评估结果反哺出题的反馈闭环）
 
             输出格式要求（必须严格遵守）：
             - 题目用 Markdown 标题单独成行，例如：### 第 1 题：线程池（Java 并发）
@@ -101,6 +109,8 @@ public class InterviewAssistant {
     // 代码事实清单仓储（阶段 4.1 新增）：双 Agent 流水线里，分析 Agent 把清单落这表，
     // 面试官从这里按 sessionId 取清单出题。这就是 Agent 间"落库传递数据契约"的读取端
     private final CodeProfileRepository codeProfileRepository;
+    // 跨会话薄弱点回顾（4.3 新增）：开场注入候选人历史薄弱点，实现"反馈闭环"的消费端
+    private final WeaknessProfileService weaknessProfileService;
 
     public InterviewAssistant(ChatModel chatModel,
                               InterviewTools interviewTools,
@@ -108,7 +118,8 @@ public class InterviewAssistant {
                               KnowledgeSearchService knowledgeSearchService,
                               ChatMemory chatMemory,
                               MemorySaver memorySaver,
-                              CodeProfileRepository codeProfileRepository) {
+                              CodeProfileRepository codeProfileRepository,
+                              WeaknessProfileService weaknessProfileService) {
 
         // MCP 工具通过 ObjectProvider 注入（而非直接 @Autowired）：
         // 原因是降级兼容——当未配置 MCP server 或 npx 拉包失败时，自动装配不会产出
@@ -141,6 +152,7 @@ public class InterviewAssistant {
         this.memorySaver = memorySaver;
         this.knowledgeSearchService = knowledgeSearchService;
         this.codeProfileRepository = codeProfileRepository;
+        this.weaknessProfileService = weaknessProfileService;
     }
 
     /**
@@ -158,24 +170,34 @@ public class InterviewAssistant {
     /**
      * 发送一次面试对话请求（SSE 流式）。
      *
-     * 流程：题库 RAG 前置检索 + Redis 窗口历史组装消息 → ReactAgent 流式推理
+     * 流程：跨会话薄弱点注入 + 题库 RAG 前置检索 + Redis 窗口历史组装消息 → ReactAgent 流式推理
      * → 完成后写回短期窗口并释放本次运行的 checkpoint。
      *
      * sessionId 由前端（或 API 调用方）传入，后端不生成。它被用于两处：
      *  1. threadId → ReAct checkpoint 的会话隔离键；
      *  2. 工具内从框架注入的 RunnableConfig 取回 threadId 作为评分归属的 sessionId。
+     *
+     * candidateId（4.3 新增）由调用方传入：作为候选人身份键写入 RunnableConfig metadata，
+     *  工具（scoreRecord/getWeaknessProfile）经 SessionKeys.candidateId 读回——跨会话薄弱点聚合的身份维度。
      */
-    public Flux<String> chat(String userMessage, String sessionId) {
+    public Flux<String> chat(String userMessage, String sessionId, String candidateId) {
 
         // ── 第 1 步：给"这场面试"准备好开场记录本（图状态 messages 的初始内容）──
         // 这里在模拟以前记忆顾问 + RAG 顾问自动做的事，只是现在由我们显式组装。
         // 阶段 4.1 新增：还可能注入【代码事实清单】——由上游 CodeAnalyzerAgent 产出、
-        // 落库在 code_profile 表，面试官据此出题（这是双 Agent 数据契约的消费端）。
-        //   ① 代码事实清单（loadCodeFacts 取自 code_profile 表）→ system 消息；
-        //   ② 题库知识（searchKnowledge 检索结果）→ system 消息；
-        //   ③ 短期窗口历史（chatMemory.get）→ 最近 60 条对话抄进来；
-        //   ④ 最后放上面试者这句新提问。
+        // 落库在 code_profile 表，面试官据此出题（这是双 Agent 数据契约的消费端）；
+        // 阶段 4.3 新增：【跨会话薄弱点回顾】——候选人有历史评分时注入，反馈闭环的消费端。
+        //   ① 跨会话薄弱点回顾（WeaknessProfileService，4.3）→ system 消息（无历史则跳过）；
+        //   ② 代码事实清单（loadCodeFacts 取自 code_profile 表）→ system 消息；
+        //   ③ 题库知识（knowledgeSearchService 检索结果）→ system 消息；
+        //   ④ 短期窗口历史（chatMemory.get）→ 最近 60 条对话抄进来；
+        //   ⑤ 最后放上面试者这句新提问。
         List<Message> messages = new ArrayList<>();
+
+        String weaknessContext = weaknessProfileService.loadProfile(candidateId);
+        if (!weaknessContext.isBlank()) {
+            messages.add(new SystemMessage(weaknessContext));
+        }
 
         String codeFactsContext = loadCodeFacts(sessionId);
         if (!codeFactsContext.isBlank()) {
@@ -190,9 +212,14 @@ public class InterviewAssistant {
         messages.addAll(chatMemory.get(sessionId));          // Redis 滑动窗口历史
         messages.add(new UserMessage(userMessage));
 
-        // ── 第 2 步：指定"这是哪场面试"并开跑循环 ──
+        // ── 第 2 步：指定"这是哪场面试 / 哪个候选人"并开跑循环 ──
         // threadId = sessionId：既用来隔离每本书(会话)，也是工具里取 sessionId 的来源。
-        RunnableConfig config = RunnableConfig.builder().threadId(sessionId).build();
+        // metadata 写入 candidateId（4.3）：工具经 SessionKeys.candidateId 从同一 config 读回，
+        // 与 threadId 一并透传子图（"写端"，读端在第 3 步已就绪）。
+        RunnableConfig config = RunnableConfig.builder()
+                .threadId(sessionId)
+                .addMetadata(SessionKeys.CANDIDATE_ID_KEY, candidateId)
+                .build();
 
         Flux<Message> agentStream;
         try {

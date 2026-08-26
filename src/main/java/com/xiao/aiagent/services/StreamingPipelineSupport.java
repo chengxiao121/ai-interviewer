@@ -49,24 +49,37 @@ public abstract class StreamingPipelineSupport {
     protected final ChatMemory chatMemory;
     protected final MemorySaver memorySaver;
     protected final KnowledgeSearchService knowledgeSearchService;
+    /** 跨会话薄弱点回顾（4.3 新增）：开场注入候选人的历史薄弱点摘要 */
+    protected final WeaknessProfileService weaknessProfileService;
 
     protected StreamingPipelineSupport(ChatMemory chatMemory,
                                        MemorySaver memorySaver,
-                                       KnowledgeSearchService knowledgeSearchService) {
+                                       KnowledgeSearchService knowledgeSearchService,
+                                       WeaknessProfileService weaknessProfileService) {
         this.chatMemory = chatMemory;
         this.memorySaver = memorySaver;
         this.knowledgeSearchService = knowledgeSearchService;
+        this.weaknessProfileService = weaknessProfileService;
     }
 
     /**
      * 组装"通用上下文"（入口只有一次机会——因为路由/并行发生在图内部，没法先路由再定制）：
-     *   ① 题库知识（RAG 前置检索，KnowledgeSearchService）→ SystemMessage（检索不到跳过）；
-     *   ② 短期窗口历史 → 平铺进消息列表（最近 maxMessages 条）；
-     *   ③ 用户本轮消息。
+     *   ① 跨会话薄弱点回顾（4.3，WeaknessProfileService）→ SystemMessage（无历史记录跳过）；
+     *   ② 题库知识（RAG 前置检索，KnowledgeSearchService）→ SystemMessage（检索不到跳过）；
+     *   ③ 短期窗口历史 → 平铺进消息列表（最近 maxMessages 条）；
+     *   ④ 用户本轮消息。
      */
-    protected List<Message> buildChatMessages(String userMessage, String sessionId) {
+    protected List<Message> buildChatMessages(String userMessage, String sessionId, String candidateId) {
         List<Message> messages = new ArrayList<>();
 
+        // ① 跨会话薄弱点回顾（4.3）：候选人有历史评分才注入，让面试官开场即"记得"上次的薄弱考点；
+        //    无评分记录时 loadProfile 返回空串，跳过注入，不污染新候选人/无历史的开场
+        String weaknessContext = weaknessProfileService.loadProfile(candidateId);
+        if (!weaknessContext.isBlank()) {
+            messages.add(new SystemMessage(weaknessContext));
+        }
+
+        // ② 题库知识
         String knowledgeContext = knowledgeSearchService.search(userMessage);
         if (!knowledgeContext.isBlank()) {
             messages.add(new SystemMessage(knowledgeContext));

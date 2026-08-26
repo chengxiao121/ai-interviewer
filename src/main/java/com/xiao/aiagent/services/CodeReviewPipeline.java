@@ -5,6 +5,7 @@ import com.alibaba.cloud.ai.graph.agent.flow.agent.SequentialAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import com.xiao.aiagent.repository.CodeProfileRepository;
+import com.xiao.aiagent.tools.SessionKeys;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.stereotype.Service;
@@ -46,9 +47,10 @@ public class CodeReviewPipeline extends StreamingPipelineSupport {
                               CodeProfileRepository codeProfileRepository,
                               ChatMemory chatMemory,
                               MemorySaver memorySaver,
-                              KnowledgeSearchService knowledgeSearchService) {
+                              KnowledgeSearchService knowledgeSearchService,
+                              WeaknessProfileService weaknessProfileService) {
 
-        super(chatMemory, memorySaver, knowledgeSearchService);   // 三个公共依赖进基类
+        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService);   // 四个公共依赖进基类
 
         // ── 组装双 Agent 流水线 ──
         // subAgents 里的顺序 = 执行顺序：先分析、后面试。
@@ -89,14 +91,15 @@ public class CodeReviewPipeline extends StreamingPipelineSupport {
      *
      * @param userMessage 用户消息（含文件路径）
      * @param sessionId   会话 id（threadId，隔离分析结果/记忆/checkpoint）
+     * @param candidateId 候选人 id（4.3 新增）：写入 config metadata，供工具跨会话聚合
      */
-    public Flux<String> codeReviewChat(String userMessage, String sessionId) {
+    public Flux<String> codeReviewChat(String userMessage, String sessionId, String candidateId) {
 
         // ── 路径 A：复用路径（"落库而非内存传递"的红利）──
         // 同会话已分析过 → 跳过分析 Agent，面试官直接从库里取清单出题。
         if (codeProfileRepository.existsBySessionId(sessionId)) {
             log.info("会话 {} 已有代码分析记录，跳过分析 Agent，直接进入面试官 Agent（复用清单）", sessionId);
-            return interviewer.chat(userMessage, sessionId);
+            return interviewer.chat(userMessage, sessionId, candidateId);
         }
 
         // ── 路径 B：流水线路径（首次分析）──
@@ -107,12 +110,16 @@ public class CodeReviewPipeline extends StreamingPipelineSupport {
         log.info("代码评审双 Agent 流水线启动：sessionId={}，链路 = 代码分析 Agent → 面试官 Agent", sessionId);
 
         // threadId = sessionId：子 Agent 的工具（saveCodeProfile/getCodeFacts/scoreRecord）
-        // 都从框架注入的 RunnableConfig 取它做会话隔离，整条流水线共用同一把钥匙
-        RunnableConfig config = RunnableConfig.builder().threadId(sessionId).build();
+        // 都从框架注入的 RunnableConfig 取它做会话隔离，整条流水线共用同一把钥匙；
+        // metadata 写入 candidateId（4.3）：工具经 SessionKeys.candidateId 从同一 config 读回（"写端"）
+        RunnableConfig config = RunnableConfig.builder()
+                .threadId(sessionId)
+                .addMetadata(SessionKeys.CANDIDATE_ID_KEY, candidateId)
+                .build();
 
         Flux<Message> agentStream;
         try {
-            agentStream = pipeline.streamMessages(buildChatMessages(userMessage, sessionId), config);
+            agentStream = pipeline.streamMessages(buildChatMessages(userMessage, sessionId, candidateId), config);
         } catch (GraphRunnerException e) {
             log.error("双 Agent 流水线启动失败：sessionId={}", sessionId, e);
             return Flux.error(e);
