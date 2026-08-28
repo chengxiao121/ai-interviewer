@@ -77,10 +77,17 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
     /** 代码评审意图关键词 */
     private static final List<String> CODE_KEYWORDS = List.of(
             "代码评审", "评审我的", "看我的代码", "看下我的代码", "我的实现", "针对我的", "看我代码", "这段代码");
-    /** JD 意图关键词 */
-    private static final List<String> JD_KEYWORDS = List.of("JD", "jd", "岗位", "职位", "job description");
-    /** 简历意图关键词 */
-    private static final List<String> RESUME_KEYWORDS = List.of("简历", "resume", "CV");
+    /**
+     * JD 意图匹配（验收修复）：只用子串包含会把 JDK/JDBC 误判成"提到了 JD 资料"——
+     * 实测候选人回答里的"JDK 提供的工具类"被送进资料流水线。用 `JD(?!K|BC)` 排除 JDK/JDBC，
+     * 保留"这个 JD""JD 里要求"这类真实表述。
+     */
+    private static final Pattern JD_PATTERN = Pattern.compile("JD(?!(K|BC))", Pattern.CASE_INSENSITIVE);
+    /** JD 中文/英文关键词（不含"JD"本身——那走 JD_PATTERN） */
+    private static final List<String> JD_KEYWORDS = List.of("岗位", "职位", "job description");
+    /** 简历意图关键词；CV 用词边界匹配，避免嵌在英文单词里误报 */
+    private static final List<String> RESUME_KEYWORDS = List.of("简历", "resume");
+    private static final Pattern CV_PATTERN = Pattern.compile("(?<![A-Za-z])CV(?![A-Za-z])", Pattern.CASE_INSENSITIVE);
 
     /** 组合缓存：bitmask → 编排图（8 种组合封顶，实际常用的只有少数几种） */
     private final Map<Integer, SequentialAgent> pipelineCache = new ConcurrentHashMap<>();
@@ -129,10 +136,10 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
                 || containsAny(userMessage, CODE_KEYWORDS)) {
             materials.add(Material.CODE);
         }
-        if (containsAny(userMessage, JD_KEYWORDS)) {
+        if (JD_PATTERN.matcher(userMessage).find() || containsAny(userMessage, JD_KEYWORDS)) {
             materials.add(Material.JD);
         }
-        if (containsAny(userMessage, RESUME_KEYWORDS)) {
+        if (CV_PATTERN.matcher(userMessage).find() || containsAny(userMessage, RESUME_KEYWORDS)) {
             materials.add(Material.RESUME);
         }
         return materials;
@@ -203,7 +210,7 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
         return pipelineCache.computeIfAbsent(bitmask(materials), k -> build(materials));
     }
 
-    /** 组装"并行分析 → 面试官"两层编排图（分析官顺序：JD → 简历 → 代码，与 4.2 综合流水线一致） */
+    /** 组装"分析 → 面试官"两层编排图（分析官顺序：JD → 简历 → 代码，与 4.2 综合流水线一致） */
     private SequentialAgent build(Set<Material> materials) {
         // ParallelAgent.subAgents 要求 Agent 接口列表（ReactAgent 是其实现）
         List<Agent> analyzers = new ArrayList<>();
@@ -217,21 +224,29 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
             analyzers.add(codeAnalyzer.getAgent());
         }
 
-        // 内层：并行分析（各读各的资料、各落各的清单，ConcatenationMergeStrategy 拼成一段物料）
-        ParallelAgent parallel = ParallelAgent.builder()
-                .name("parallel-analyzers")
-                .description("资料分析官并行分析（" + analyzers.size() + " 路），合并事实清单")
-                .subAgents(analyzers)
-                .mergeStrategy(new ConcatenationMergeStrategy("\n\n"))
-                .mergeOutputKey("merged_facts")
-                .maxConcurrency(analyzers.size())
-                .build();
+        // 分析阶段（验收修复）：多个分析官 → ParallelAgent 并行（4.2 综合形态）；
+        // 单个分析官 → 直接挂进 SequentialAgent（4.1 双 Agent 形态）。
+        // 为什么不能统一用 ParallelAgent：框架校验要求至少 2 个子 Agent——
+        // 实测报 "ParallelAgent requires at least 2 sub-agents"，单资料面试（只给代码/JD/简历）会 500。
+        Agent analysisStage;
+        if (analyzers.size() == 1) {
+            analysisStage = analyzers.get(0);
+        } else {
+            analysisStage = ParallelAgent.builder()
+                    .name("parallel-analyzers")
+                    .description("资料分析官并行分析（" + analyzers.size() + " 路），合并事实清单")
+                    .subAgents(analyzers)
+                    .mergeStrategy(new ConcatenationMergeStrategy("\n\n"))
+                    .mergeOutputKey("merged_facts")
+                    .maxConcurrency(analyzers.size())
+                    .build();
+        }
 
-        // 外层：并行分析完 → 面试官出题（面试官必须在分析之后——时序由编排保证）
+        // 外层：分析完 → 面试官出题（面试官必须在分析之后——时序由编排保证）
         SequentialAgent pipeline = SequentialAgent.builder()
                 .name("material-interview")
-                .description("资料分析面试流水线：" + analyzers.size() + " 路分析官并行 → 面试官出题")
-                .subAgents(List.of(parallel, interviewer.getAgent()))
+                .description("资料分析面试流水线：" + analyzers.size() + " 路分析官 → 面试官出题")
+                .subAgents(List.of(analysisStage, interviewer.getAgent()))
                 .saver(memorySaver)
                 .build();
 
