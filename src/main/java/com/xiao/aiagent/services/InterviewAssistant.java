@@ -6,6 +6,7 @@ import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import com.xiao.aiagent.entity.CodeProfile;
+import com.xiao.aiagent.entity.InterviewPlan;
 import com.xiao.aiagent.repository.CodeProfileRepository;
 import com.xiao.aiagent.tools.InterviewTools;
 import com.xiao.aiagent.tools.SessionKeys;
@@ -59,7 +60,8 @@ public class InterviewAssistant {
             你的职责：
             1. 根据岗位和求职者水平出题（Java/Redis/数据库等），题目循序渐进；
             2. 针对回答进行追问，答错时给予提示引导；
-            3. 点评回答并给出评分与改进建议，点评完成后必须调用 scoreRecord 工具把评分落库；
+            3. 针对回答进行点评并给出改进建议；评分已由系统评估环节独立完成——若上下文带【上一题评估】，
+               按其中的得分与点评向求职者自然转述（不要另行自打一个分数），并按其"下题建议"调整本题的难度与方向；
             4. 出题时优先参考知识库中的题库内容，引用时注明出处。
             5. 求职者询问答题统计或薄弱考点时，调用 questionStats 工具查询后如实转述结果。
             6. 求职者分享某个 URL（文章、技术文档等）让你参考时，使用 fetch 工具读取该网页内容，
@@ -90,13 +92,6 @@ public class InterviewAssistant {
             - 不同部分（题目/出处/提示/你的点评）之间必须空一行，不要连写在一起。
             - 使用 Markdown 加粗、列表等格式让回答清晰易读。
 
-            评分标准（0~10 分，请严格按此打分）：
-            - 回答是否准确、完整（核心得分项）；
-            - 是否涉及关键知识点；
-            - 是否表达清晰、条理。
-            分档参考：0-3 完全不会或严重错误 / 4-6 部分正确、有缺失 / 7-9 较完整、有小瑕疵 / 10 准确全面。
-            打分后必须调用 scoreRecord 工具落库，再给出点评。已点评过的同一道题不要重复调用 scoreRecord 重新落库。
-
             要求：语气专业、友好，全程使用中文。
             """;
 
@@ -117,6 +112,8 @@ public class InterviewAssistant {
     private final WeaknessProfileService weaknessProfileService;
     // 面试计划（阶段 5.2 新增）："考什么"的范围契约，chat() 每轮注入 + 评估官的考点词表来源
     private final InterviewPlanService interviewPlanService;
+    // 答案评估（阶段 5.3 新增）：会话内评估闭环——每轮评分落库 + 产【上一题评估】注入文本
+    private final AnswerEvaluatorService answerEvaluatorService;
 
     public InterviewAssistant(ChatModel chatModel,
                               InterviewTools interviewTools,
@@ -126,7 +123,8 @@ public class InterviewAssistant {
                               MemorySaver memorySaver,
                               CodeProfileRepository codeProfileRepository,
                               WeaknessProfileService weaknessProfileService,
-                              InterviewPlanService interviewPlanService) {
+                              InterviewPlanService interviewPlanService,
+                              AnswerEvaluatorService answerEvaluatorService) {
 
         // MCP 工具通过 ObjectProvider 注入（而非直接 @Autowired）：
         // 原因是降级兼容——当未配置 MCP server 或 npx 拉包失败时，自动装配不会产出
@@ -146,7 +144,7 @@ public class InterviewAssistant {
                 .description("AI 智能面试官：出题、追问、点评打分")  // 描述它负责干什么
                 .systemPrompt(SYSTEM_PROMPT)  // 【大脑人设】面试官身份 + 全部行为规则（出题/追问/评分/落库）
                 .model(chatModel)             // 【大脑本体】用哪个大模型：qwen（取代了 ChatClient.Builder）
-                .methodTools(interviewTools)  // 【武器】允许调用的内置 @Tool 工具（scoreRecord/questionStats/calculator）
+                .methodTools(interviewTools)  // 【武器】允许调用的内置 @Tool 工具（questionStats/getWeaknessProfile/calculator/getCodeFacts）
                 .saver(memorySaver)           // 【存档器】每轮循环的"记录本快照"存到哪、按 threadId 分会话
                 .enableLogging(true);         // 打开各节点(思考/观察)请求响应日志，方便看循环过程（可观测性）
 
@@ -161,6 +159,7 @@ public class InterviewAssistant {
         this.codeProfileRepository = codeProfileRepository;
         this.weaknessProfileService = weaknessProfileService;
         this.interviewPlanService = interviewPlanService;
+        this.answerEvaluatorService = answerEvaluatorService;
     }
 
     /**
@@ -190,16 +189,26 @@ public class InterviewAssistant {
      */
     public Flux<String> chat(String userMessage, String sessionId, String candidateId) {
 
+        // ── 第 0 步（阶段 5.3）：会话内评估闭环——先评估上一答，再组装本题上下文 ──
+        // 评估必须在出题【之前】：它的结论（得分/薄弱/下题建议）要影响本题的难度与方向。
+        // 评分落库由评估服务代码直接执行（不再经面试官调 scoreRecord 工具，结构性修掉风险 23）。
+        InterviewPlan plan = interviewPlanService.ensurePlan(userMessage, sessionId, candidateId);
+        AnswerEvaluatorService.EvaluationOutcome evaluation =
+                answerEvaluatorService.evaluateTurn(userMessage, sessionId, candidateId, plan);
+
         // ── 第 1 步：给"这场面试"准备好开场记录本（图状态 messages 的初始内容）──
         // 这里在模拟以前记忆顾问 + RAG 顾问自动做的事，只是现在由我们显式组装。
         // 阶段 4.1 新增：还可能注入【代码事实清单】——由上游 CodeAnalyzerAgent 产出、
         // 落库在 code_profile 表，面试官据此出题（这是双 Agent 数据契约的消费端）；
-        // 阶段 4.3 新增：【跨会话薄弱点回顾】——候选人有历史评分时注入，反馈闭环的消费端。
+        // 阶段 4.3 新增：【跨会话薄弱点回顾】——候选人有历史评分时注入，反馈闭环的消费端；
+        // 阶段 5.2 新增：【面试计划】——"考什么"的范围契约；5.3 新增：【上一题评估】——当轮反馈。
         //   ① 跨会话薄弱点回顾（WeaknessProfileService，4.3）→ system 消息（无历史则跳过）；
-        //   ② 代码事实清单（loadCodeFacts 取自 code_profile 表）→ system 消息；
-        //   ③ 题库知识（knowledgeSearchService 检索结果）→ system 消息；
-        //   ④ 短期窗口历史（chatMemory.get）→ 最近 60 条对话抄进来；
-        //   ⑤ 最后放上面试者这句新提问。
+        //   ② 面试计划（InterviewPlanService，5.2）→ system 消息（无计划/生成失败跳过）；
+        //   ③ 代码事实清单（loadCodeFacts 取自 code_profile 表）→ system 消息；
+        //   ④ 题库知识（knowledgeSearchService 检索结果）→ system 消息；
+        //   ⑤ 上一题评估（AnswerEvaluatorService，5.3）→ system 消息（非作答/评估失败跳过）；
+        //   ⑥ 短期窗口历史（chatMemory.get）→ 最近 60 条对话抄进来；
+        //   ⑦ 最后放上面试者这句新提问。
         List<Message> messages = new ArrayList<>();
 
         String weaknessContext = weaknessProfileService.loadProfile(candidateId);
@@ -207,10 +216,7 @@ public class InterviewAssistant {
             messages.add(new SystemMessage(weaknessContext));
         }
 
-        // ② 面试计划（阶段 5.2）："考什么"的范围契约。ensurePlan 幂等（无计划才生成；
-        //    USER 临时计划在 JD 画像落库后自动升级为 JD 版），生成失败渲染空串跳过注入。
-        String planContext = interviewPlanService.renderPlan(
-                interviewPlanService.ensurePlan(userMessage, sessionId, candidateId));
+        String planContext = interviewPlanService.renderPlan(plan);
         if (!planContext.isBlank()) {
             messages.add(new SystemMessage(planContext));
         }
@@ -223,6 +229,10 @@ public class InterviewAssistant {
         String knowledgeContext = knowledgeSearchService.search(userMessage);
         if (!knowledgeContext.isBlank()) {
             messages.add(new SystemMessage(knowledgeContext));
+        }
+
+        if (!evaluation.injectionText().isBlank()) {
+            messages.add(new SystemMessage(evaluation.injectionText()));
         }
 
         messages.addAll(chatMemory.get(sessionId));          // Redis 滑动窗口历史

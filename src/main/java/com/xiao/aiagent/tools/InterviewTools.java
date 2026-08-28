@@ -1,7 +1,6 @@
 package com.xiao.aiagent.tools;
 
 import com.xiao.aiagent.entity.CodeProfile;
-import com.xiao.aiagent.entity.ScoreRecord;
 import com.xiao.aiagent.repository.CodeProfileRepository;
 import com.xiao.aiagent.repository.ScoreRecordRepository;
 import com.xiao.aiagent.services.WeaknessProfileService;
@@ -12,10 +11,8 @@ import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 
 /**
  * 面试官 Agent 专用工具集（Function Calling）。
@@ -23,8 +20,12 @@ import java.util.Optional;
  * 注册方式：InterviewAssistant 构造 ReactAgent 时 .methodTools(this) 注入。
  *
  * 阶段 4.1 起本类与 CodeAnalyzerTools 分工：
- *   - 这里是【面试官】的工具：scoreRecord / questionStats / calculator / getCodeFacts；
+ *   - 这里是【面试官】的工具：questionStats / getWeaknessProfile / calculator / getCodeFacts；
  *   - CodeAnalyzerTools 是【分析官】的工具：saveCodeProfile。
+ *
+ * 阶段 5.3 变更：scoreRecord 工具已删除——评分落库移交 AnswerEvaluatorService（代码侧
+ * 确定性落库）。为什么删而不是留：工具留着，"模型工具写"与"服务代码写"两条落库路径并存，
+ * 口径必然漂移；删掉后 score_record 的唯一写入方是评估服务，幂等/词表/钳制逻辑单点收口。
  */
 @Component
 public class InterviewTools {
@@ -42,73 +43,6 @@ public class InterviewTools {
         this.scoreRecordRepository = scoreRecordRepository;
         this.codeProfileRepository = codeProfileRepository;
         this.weaknessProfileService = weaknessProfileService;
-    }
-
-    /**
-     * 保存单题评分到数据库。
-     * 面试官每点评完一道题后调用，把题目、求职者回答、评分、点评落库，
-     * 供后续 questionStats 工具做薄弱考点统计。
-     *
-     * @param topic     考点（如 Java并发、Redis持久化、MySQL索引），用于按考点聚合
-     * @param question  题目内容
-     * @param answer    求职者的回答
-     * @param score     评分（0~10，可带一位小数）
-     * @param feedback  面试官点评 / 改进建议
-     * @param toolContext 工具上下文容器（Spring AI 注入，不是模型填的）。
-     *        阶段 3（ReactAgent）起：框架把本次运行的 RunnableConfig 放进工具上下文（key=_AGENT_CONFIG_），
-     *        chat() 里 build 时已写入 threadId=sessionId，这里取出作为评分归属。
-     *        难点：不能把 sessionId 写成普通 @ToolParam 参数——
-     *        普通参数会进模型可见的工具 schema，模型要填、可能填错串会；
-     *        threadId 由服务端设置，模型看不到也改不了，会话隔离最稳。
-     * @return 保存结果提示（含记录 id），供 LLM 向用户转述
-     */
-    @Tool(description = "保存单题评分到数据库。面试官点评完一道题后调用，把题目、回答、评分、点评落库。")
-    public String scoreRecord(
-            @ToolParam(description = "考点，如 Java并发、Redis持久化、MySQL索引，用于按考点聚合统计") String topic,
-            @ToolParam(description = "题目内容") String question,
-            @ToolParam(description = "求职者的回答") String answer,
-            @ToolParam(description = "评分，0~10 分，可带一位小数") Double score,
-            @ToolParam(description = "面试官点评或改进建议") String feedback,
-            ToolContext toolContext) {
-
-        // 会话 key 取【根 sessionId】（子图会给 threadId 自动加 _subgraph_ 后缀，详见 SessionKeys）
-        String sessionId = SessionKeys.rootSessionId(toolContext);
-        // 候选人 id 取【RunnableConfig metadata】（4.3 新增）：跨会话薄弱点聚合的身份维度，
-        // 与 sessionId 一起落库——sessionId 管"这场面试"，candidateId 管"这个人"（详见 SessionKeys）
-        String candidateId = SessionKeys.candidateId(toolContext);
-        log.info("工具调用 scoreRecord：sessionId={}, candidateId={}, topic={}, score={}",
-                sessionId, candidateId, topic, score);
-
-        // 防御性校验：评分必须在 0~10，越界值钳制到边界（LLM 打分偶尔会给出非法值，避免脏数据污染统计）
-        double validScore = Math.max(0, Math.min(10, score));
-        if (validScore != score) {
-            log.warn("评分越界已钳制：原始 score={}，修正为 {}", score, validScore);
-        }
-
-        // 幂等去重：同会话同题目已评分过则更新原记录，避免模型对同一道题重复写进数据库污染统计
-        Optional<ScoreRecord> existing = scoreRecordRepository.findBySessionIdAndQuestion(sessionId, question);
-        if (existing.isPresent()) {
-            ScoreRecord record = existing.get();
-            record.setCandidateId(candidateId);   // 存量记录也补上候选人维度（老数据可能为 NULL）
-            record.setTopic(topic);
-            record.setAnswer(answer);
-            record.setScore(validScore);
-            record.setFeedback(feedback);
-            record.setCreatedAt(LocalDateTime.now());
-            ScoreRecord saved = scoreRecordRepository.save(record);
-            log.info("同题重复评分，已更新原记录：id={}, topic={}, score={}", saved.getId(), topic, validScore);
-            return String.format("已更新这道题（记录 id=%d）的评分：考点【%s】，得分 %.1f 分。",
-                    saved.getId(), topic, validScore);
-        }
-
-        ScoreRecord record = new ScoreRecord(
-                sessionId, candidateId, topic, question, answer, validScore, feedback, LocalDateTime.now());
-        ScoreRecord saved = scoreRecordRepository.save(record);
-
-        log.info("评分落库成功：id={}, topic={}, score={}", saved.getId(), topic, validScore);
-
-        return String.format("已记录评分：考点【%s】，得分 %.1f 分，记录 id=%d。下次可直接查询薄弱考点统计。",
-                topic, validScore, saved.getId());
     }
 
     /**
