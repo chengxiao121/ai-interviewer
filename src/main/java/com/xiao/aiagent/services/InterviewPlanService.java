@@ -56,7 +56,7 @@ public class InterviewPlanService {
 
     /** JD 画像落库时的 profileType（与 JdAnalyzerAgent 约定一致，升级探测用） */
     private static final String PROFILE_TYPE_JD = "JD";
-    /** 生成失败重试次数：flash 模型 JSON 输出遵从度一般，一次重试换可观的成功率（风险见计划 §10.1） */
+    /** 生成失败重试次数：flash 模型 JSON 输出遵从度一般，一次重试换可观的成功率（风险见计划 §8.1） */
     private static final int MAX_ATTEMPTS = 2;
 
     /**
