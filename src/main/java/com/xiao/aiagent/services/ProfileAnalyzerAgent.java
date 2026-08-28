@@ -39,6 +39,23 @@ public abstract class ProfileAnalyzerAgent {
     // 日志用动态 logger：getClass() 让日志显示具体子类名（code-analyzer / jd-analyzer 等）
     protected final Logger log = LoggerFactory.getLogger(getClass());
 
+    /**
+     * 资料守门（阶段 5.5 新增，拼进每个分析官系统提示的末尾）。
+     *
+     * 为什么需要：流水线收敛后，路由注册的是【全量分析官组合】——路由 LLM 只判断
+     * "是不是资料面试"，具体哪类资料在场由分析官运行时自筛。没有守门时，没资料的分析官
+     * 会被迫"硬分析"：要么凭空编造分析落库（脏清单污染面试官上下文与报告），
+     * 要么漫无目的翻文件（风险 19 的 directory_tree 漂移）。
+     * 守门把"没资料"变成一条显式的、极其简单的执行路径（直接结束），漂移面最小化。
+     */
+    private static final String MATERIAL_GATE = """
+
+            【资料守门】启动后第一步先判断：上下文中是否存在你负责的那一类资料（明确的文件路径，或用户直接粘贴的资料文本）。
+            若不存在：直接回复"无我负责的资料，跳过分析"并立即结束——禁止调用任何工具（包括 read_text_file
+            等一切读取工具）、禁止调用 saveCodeProfile 落库、禁止凭想象编造任何分析内容。
+            若存在：按上方流程正常执行。本守门优先级最高，与其他任何要求冲突时以本条为准。
+            """;
+
     // ReactAgent：拼装好的"分析循环"（构造时 build 一次，之后每次请求复用）
     private final ReactAgent agent;
     // 系统提示：analyze() 同步分析时要拼进初始消息，基类自存一份（子类的私有人设由构造参数传入）
@@ -51,7 +68,8 @@ public abstract class ProfileAnalyzerAgent {
                                    String description,
                                    String systemPrompt) {
 
-        this.systemPrompt = systemPrompt;
+        // 守门拼在子类私有 prompt 之后（字段保存拼后的完整版：analyze() 同步路径同样受守门约束）
+        this.systemPrompt = systemPrompt + MATERIAL_GATE;
 
         // MCP 工具注入：与 InterviewAssistant 一样的降级兼容策略
         // 未配置 MCP 或 npx 拉包失败时 getIfAvailable() 返回 null，Agent 只用内置 saveCodeProfile
