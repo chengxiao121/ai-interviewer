@@ -2,6 +2,7 @@ package com.xiao.aiagent.services;
 
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
+import com.xiao.aiagent.entity.InterviewPlan;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -53,17 +54,21 @@ public abstract class StreamingPipelineSupport {
     protected final WeaknessProfileService weaknessProfileService;
     /** 面试计划（阶段 5.2 新增）："考什么"的范围契约，buildChatMessages 每轮注入 */
     protected final InterviewPlanService interviewPlanService;
+    /** 答案评估（阶段 5.3 新增）：会话内评估闭环，buildChatMessages 每轮先评估再注入 */
+    protected final AnswerEvaluatorService answerEvaluatorService;
 
     protected StreamingPipelineSupport(ChatMemory chatMemory,
                                        MemorySaver memorySaver,
                                        KnowledgeSearchService knowledgeSearchService,
                                        WeaknessProfileService weaknessProfileService,
-                                       InterviewPlanService interviewPlanService) {
+                                       InterviewPlanService interviewPlanService,
+                                       AnswerEvaluatorService answerEvaluatorService) {
         this.chatMemory = chatMemory;
         this.memorySaver = memorySaver;
         this.knowledgeSearchService = knowledgeSearchService;
         this.weaknessProfileService = weaknessProfileService;
         this.interviewPlanService = interviewPlanService;
+        this.answerEvaluatorService = answerEvaluatorService;
     }
 
     /**
@@ -85,8 +90,8 @@ public abstract class StreamingPipelineSupport {
 
         // ①b 面试计划（阶段 5.2）：无计划则生成（幂等，已有计划直接返回），注入后面试官按计划考点出题。
         //    生成失败返回 null → 渲染为空串 → 跳过注入，面试不阻塞（计划是增强项不是阻塞项）
-        String planContext = interviewPlanService.renderPlan(
-                interviewPlanService.ensurePlan(userMessage, sessionId, candidateId));
+        InterviewPlan plan = interviewPlanService.ensurePlan(userMessage, sessionId, candidateId);
+        String planContext = interviewPlanService.renderPlan(plan);
         if (!planContext.isBlank()) {
             messages.add(new SystemMessage(planContext));
         }
@@ -95,6 +100,19 @@ public abstract class StreamingPipelineSupport {
         String knowledgeContext = knowledgeSearchService.search(userMessage);
         if (!knowledgeContext.isBlank()) {
             messages.add(new SystemMessage(knowledgeContext));
+        }
+
+        // ②b 会话内评估（阶段 5.3 验收修复）：评估"上一问 + 本轮消息"。
+        // 为什么挂在这条公共装配点上：面试官在两条编排路径（语义路由 / 资料流水线）里都是
+        // 作为【子图】运行的，不会流经 InterviewAssistant.chat() 里的评估步骤——
+        // 验收实测踩中：普通面试（无资料会话）每轮都走语义路由，评估从未触发、评分从未落库。
+        // 作答 → 代码侧落库 score_record + 注入【上一题评估】；非作答/失败 → 空注入不影响流程。
+        // 与 InterviewAssistant.chat() 的评估不重复：chat() 只在直连路径（复用快路径）被调用，
+        // 那条路径不经本方法，二者互斥覆盖全部入口。
+        AnswerEvaluatorService.EvaluationOutcome evaluation =
+                answerEvaluatorService.evaluateTurn(userMessage, sessionId, candidateId, plan);
+        if (!evaluation.injectionText().isBlank()) {
+            messages.add(new SystemMessage(evaluation.injectionText()));
         }
 
         messages.addAll(chatMemory.get(sessionId));

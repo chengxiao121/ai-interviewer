@@ -74,9 +74,11 @@ public class AgentRouter extends StreamingPipelineSupport {
                        MemorySaver memorySaver,
                        KnowledgeSearchService knowledgeSearchService,
                        WeaknessProfileService weaknessProfileService,
-                       InterviewPlanService interviewPlanService) {
+                       InterviewPlanService interviewPlanService,
+                       AnswerEvaluatorService answerEvaluatorService) {
 
-        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService, interviewPlanService);
+        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService,
+                interviewPlanService, answerEvaluatorService);
 
         // ── 组装"分诊台"（只剩两个科室）──
         // material-interview 注册的是全量组合（三个分析官都在）：路由 LLM 只判断"是不是资料面试"，

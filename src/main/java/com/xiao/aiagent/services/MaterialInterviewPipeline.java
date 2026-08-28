@@ -100,9 +100,11 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
                                      MemorySaver memorySaver,
                                      KnowledgeSearchService knowledgeSearchService,
                                      WeaknessProfileService weaknessProfileService,
-                                     InterviewPlanService interviewPlanService) {
+                                     InterviewPlanService interviewPlanService,
+                                     AnswerEvaluatorService answerEvaluatorService) {
 
-        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService, interviewPlanService);
+        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService,
+                interviewPlanService, answerEvaluatorService);
 
         this.codeAnalyzer = codeAnalyzer;
         this.jdAnalyzer = jdAnalyzer;
