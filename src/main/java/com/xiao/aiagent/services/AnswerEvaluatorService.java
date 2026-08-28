@@ -156,7 +156,7 @@ public class AnswerEvaluatorService {
                         attempt, MAX_ATTEMPTS, sessionId, e.getMessage());
             }
         }
-        // 降级：评估是增强项不是阻塞项——失败只丢本次评分，面试照常（计划文档 §8.1）
+        // 降级：评估是增强项不是阻塞项——失败只丢本次评分，面试照常（计划文档 §10.1）
         log.warn("答案评估最终失败，本轮不评分不注入：sessionId={}", sessionId);
         return new EvaluationOutcome(false, "");
     }
