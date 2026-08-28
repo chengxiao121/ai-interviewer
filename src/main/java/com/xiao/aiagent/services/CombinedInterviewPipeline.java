@@ -52,9 +52,10 @@ public class CombinedInterviewPipeline extends StreamingPipelineSupport {
                                      ChatMemory chatMemory,
                                      MemorySaver memorySaver,
                                      KnowledgeSearchService knowledgeSearchService,
-                                     WeaknessProfileService weaknessProfileService) {
+                                     WeaknessProfileService weaknessProfileService,
+                                     InterviewPlanService interviewPlanService) {
 
-        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService);   // 四个公共依赖进基类
+        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService, interviewPlanService);   // 公共依赖进基类
 
         // ── 内层：并行分析（三个分析官同时跑）──
         // mergeOutputKey：合并结果写入图状态的键（形式要件，物理传数据靠 DB + 状态消息，见类注释）

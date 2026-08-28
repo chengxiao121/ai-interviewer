@@ -78,6 +78,10 @@ public class InterviewAssistant {
                取回跨会话历史薄弱点，再按同样方式开场与考察。
                注意：上下文里没有【跨会话薄弱点回顾】时，不要虚构或凭空编造求职者的历史薄弱点。
                （阶段 4.3：跨会话薄弱点回顾 = 评估结果反哺出题的反馈闭环）
+            10. 若系统消息中带有【面试计划】：必须按计划中的考点与优先级出题，优先覆盖尚未考察过的
+               高优先级考点，题目难度对齐考点的难度档（基础/进阶/挑战）；不要出计划之外考点的题目
+               （求职者主动要求换主题时除外，此时如实回应，之后的题目回到计划）。
+               （阶段 5.2：面试计划 = "考什么"的范围契约，评估报告的覆盖矩阵以它为基准）
 
             输出格式要求（必须严格遵守）：
             - 题目用 Markdown 标题单独成行，例如：### 第 1 题：线程池（Java 并发）
@@ -111,6 +115,8 @@ public class InterviewAssistant {
     private final CodeProfileRepository codeProfileRepository;
     // 跨会话薄弱点回顾（4.3 新增）：开场注入候选人历史薄弱点，实现"反馈闭环"的消费端
     private final WeaknessProfileService weaknessProfileService;
+    // 面试计划（阶段 5.2 新增）："考什么"的范围契约，chat() 每轮注入 + 评估官的考点词表来源
+    private final InterviewPlanService interviewPlanService;
 
     public InterviewAssistant(ChatModel chatModel,
                               InterviewTools interviewTools,
@@ -119,7 +125,8 @@ public class InterviewAssistant {
                               ChatMemory chatMemory,
                               MemorySaver memorySaver,
                               CodeProfileRepository codeProfileRepository,
-                              WeaknessProfileService weaknessProfileService) {
+                              WeaknessProfileService weaknessProfileService,
+                              InterviewPlanService interviewPlanService) {
 
         // MCP 工具通过 ObjectProvider 注入（而非直接 @Autowired）：
         // 原因是降级兼容——当未配置 MCP server 或 npx 拉包失败时，自动装配不会产出
@@ -153,6 +160,7 @@ public class InterviewAssistant {
         this.knowledgeSearchService = knowledgeSearchService;
         this.codeProfileRepository = codeProfileRepository;
         this.weaknessProfileService = weaknessProfileService;
+        this.interviewPlanService = interviewPlanService;
     }
 
     /**
@@ -197,6 +205,14 @@ public class InterviewAssistant {
         String weaknessContext = weaknessProfileService.loadProfile(candidateId);
         if (!weaknessContext.isBlank()) {
             messages.add(new SystemMessage(weaknessContext));
+        }
+
+        // ② 面试计划（阶段 5.2）："考什么"的范围契约。ensurePlan 幂等（无计划才生成；
+        //    USER 临时计划在 JD 画像落库后自动升级为 JD 版），生成失败渲染空串跳过注入。
+        String planContext = interviewPlanService.renderPlan(
+                interviewPlanService.ensurePlan(userMessage, sessionId, candidateId));
+        if (!planContext.isBlank()) {
+            messages.add(new SystemMessage(planContext));
         }
 
         String codeFactsContext = loadCodeFacts(sessionId);

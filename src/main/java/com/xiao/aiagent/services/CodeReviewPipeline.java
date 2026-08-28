@@ -48,9 +48,10 @@ public class CodeReviewPipeline extends StreamingPipelineSupport {
                               ChatMemory chatMemory,
                               MemorySaver memorySaver,
                               KnowledgeSearchService knowledgeSearchService,
-                              WeaknessProfileService weaknessProfileService) {
+                              WeaknessProfileService weaknessProfileService,
+                              InterviewPlanService interviewPlanService) {
 
-        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService);   // 四个公共依赖进基类
+        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService, interviewPlanService);   // 公共依赖进基类
 
         // ── 组装双 Agent 流水线 ──
         // subAgents 里的顺序 = 执行顺序：先分析、后面试。

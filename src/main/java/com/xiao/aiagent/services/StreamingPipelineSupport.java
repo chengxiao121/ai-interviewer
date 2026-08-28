@@ -51,15 +51,19 @@ public abstract class StreamingPipelineSupport {
     protected final KnowledgeSearchService knowledgeSearchService;
     /** 跨会话薄弱点回顾（4.3 新增）：开场注入候选人的历史薄弱点摘要 */
     protected final WeaknessProfileService weaknessProfileService;
+    /** 面试计划（阶段 5.2 新增）："考什么"的范围契约，buildChatMessages 每轮注入 */
+    protected final InterviewPlanService interviewPlanService;
 
     protected StreamingPipelineSupport(ChatMemory chatMemory,
                                        MemorySaver memorySaver,
                                        KnowledgeSearchService knowledgeSearchService,
-                                       WeaknessProfileService weaknessProfileService) {
+                                       WeaknessProfileService weaknessProfileService,
+                                       InterviewPlanService interviewPlanService) {
         this.chatMemory = chatMemory;
         this.memorySaver = memorySaver;
         this.knowledgeSearchService = knowledgeSearchService;
         this.weaknessProfileService = weaknessProfileService;
+        this.interviewPlanService = interviewPlanService;
     }
 
     /**
@@ -77,6 +81,14 @@ public abstract class StreamingPipelineSupport {
         String weaknessContext = weaknessProfileService.loadProfile(candidateId);
         if (!weaknessContext.isBlank()) {
             messages.add(new SystemMessage(weaknessContext));
+        }
+
+        // ①b 面试计划（阶段 5.2）：无计划则生成（幂等，已有计划直接返回），注入后面试官按计划考点出题。
+        //    生成失败返回 null → 渲染为空串 → 跳过注入，面试不阻塞（计划是增强项不是阻塞项）
+        String planContext = interviewPlanService.renderPlan(
+                interviewPlanService.ensurePlan(userMessage, sessionId, candidateId));
+        if (!planContext.isBlank()) {
+            messages.add(new SystemMessage(planContext));
         }
 
         // ② 题库知识

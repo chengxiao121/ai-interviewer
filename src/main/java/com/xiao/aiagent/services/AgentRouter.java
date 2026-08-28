@@ -86,9 +86,10 @@ public class AgentRouter extends StreamingPipelineSupport {
                        ChatMemory chatMemory,
                        MemorySaver memorySaver,
                        KnowledgeSearchService knowledgeSearchService,
-                       WeaknessProfileService weaknessProfileService) {
+                       WeaknessProfileService weaknessProfileService,
+                       InterviewPlanService interviewPlanService) {
 
-        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService);   // 四个公共依赖进基类
+        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService, interviewPlanService);   // 公共依赖进基类
 
         // ── 组装"分诊台" ──
         // subAgents 里放的是"可以挂号的科室"。每个子 Agent 的 description 会被路由 LLM 看到，
