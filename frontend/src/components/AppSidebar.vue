@@ -6,116 +6,205 @@ const route = useRoute()
 const chatStore = useChatStore()
 
 const nav = [
-  { name: 'chat', label: '面试对话', path: '/chat', icon: '💬' },
-  { name: 'sessions', label: '会话管理', path: '/sessions', icon: '🗂' },
-  { name: 'knowledge', label: '知识库', path: '/knowledge', icon: '📚' },
+  { name: 'chat', label: '面试对话', en: 'TRANSCRIPT', path: '/chat' },
+  { name: 'sessions', label: '会话管理', en: 'ARCHIVE', path: '/sessions' },
+  { name: 'knowledge', label: '知识库', en: 'QUESTION BANK', path: '/knowledge' },
 ]
 </script>
 
 <template>
   <aside class="sidebar">
-    <div class="logo">
-      <span class="logo-icon">🎯</span>
-      <span class="logo-text">AI 面试官</span>
+    <div class="brand">
+      <div class="seal">面</div>
+      <div class="brand-text">
+        <div class="name">AI 面试官</div>
+        <div class="caption">MOCK INTERVIEW · DOSSIER</div>
+      </div>
     </div>
 
     <nav class="nav">
       <RouterLink
-        v-for="item in nav"
+        v-for="(item, i) in nav"
         :key="item.name"
         :to="item.path"
         class="nav-item"
         :class="{ active: route.name === item.name }"
       >
-        <span class="icon">{{ item.icon }}</span>
-        <span>{{ item.label }}</span>
+        <span class="no">{{ String(i + 1).padStart(2, '0') }}</span>
+        <span class="labels">
+          <span class="label">{{ item.label }}</span>
+          <span class="en">{{ item.en }}</span>
+        </span>
       </RouterLink>
     </nav>
 
     <div class="session-info">
-      <div class="label">当前会话</div>
+      <div class="label">当前会话 · SESSION NO.</div>
       <div class="session-id" :title="chatStore.sessionId">{{ chatStore.sessionId }}</div>
-      <button class="btn-new" @click="chatStore.newSession()">＋ 新建会话</button>
+      <button class="btn-new" @click="chatStore.newSession()">＋ 开新卷</button>
     </div>
   </aside>
 </template>
 
 <style scoped>
 .sidebar {
-  width: 220px;
-  flex: 0 0 220px;
+  width: 232px;
+  flex: 0 0 232px;
   height: 100vh;
-  background: var(--color-bg-sidebar);
-  border-right: 1px solid var(--color-border);
+  background: linear-gradient(180deg, #2b251d 0%, #241f18 100%);
+  color: var(--paper-bright);
   display: flex;
   flex-direction: column;
-  padding: 16px 12px;
-  box-sizing: border-box;
+  padding: 24px 16px 18px;
+  position: relative;
+  z-index: 1;
+  border-right: 3px solid var(--ink-strong);
 }
-.logo {
+/* 书脊上的烫金细线 */
+.sidebar::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 6px;
+  border-right: 1px solid rgba(251, 246, 234, 0.08);
+  pointer-events: none;
+}
+
+.brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px 20px;
-  font-weight: 700;
-  font-size: 16px;
+  gap: 12px;
+  padding: 0 6px 26px;
 }
-.logo-icon { font-size: 20px; }
+.seal {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  background: var(--cinnabar);
+  color: #fdf4e7;
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  transform: rotate(-4deg);
+  box-shadow: inset 0 0 0 1.5px rgba(253, 244, 231, 0.55),
+    0 2px 6px rgba(0, 0, 0, 0.35);
+  transition: transform 0.25s ease;
+}
+.sidebar:hover .seal {
+  transform: rotate(0deg);
+}
+.brand-text .name {
+  font-family: var(--serif);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+}
+.brand-text .caption {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.22em;
+  color: rgba(251, 246, 234, 0.5);
+  margin-top: 4px;
+}
+
 .nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  gap: 12px;
+  padding: 11px 12px;
+  border-radius: 5px;
   text-decoration: none;
-  color: var(--color-text-muted);
-  font-size: 14px;
-  transition: background 0.15s, color 0.15s;
+  color: rgba(251, 246, 234, 0.62);
+  border-left: 2px solid transparent;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
 }
 .nav-item:hover {
-  background: var(--color-bg-soft);
-  color: var(--color-text);
+  background: rgba(251, 246, 234, 0.06);
+  color: var(--paper-bright);
 }
 .nav-item.active {
-  background: var(--color-primary);
-  color: #fff;
+  background: rgba(176, 58, 43, 0.18);
+  border-left-color: var(--cinnabar);
+  color: var(--paper-bright);
 }
-.icon { font-size: 16px; }
+.no {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--cinnabar);
+  opacity: 0.9;
+}
+.nav-item.active .no {
+  opacity: 1;
+}
+.labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.label {
+  font-size: 13.5px;
+  letter-spacing: 0.1em;
+}
+.en {
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.2em;
+  color: rgba(251, 246, 234, 0.34);
+}
+
 .session-info {
   margin-top: auto;
-  padding: 12px 10px;
-  border-top: 1px solid var(--color-border);
+  padding: 16px 10px 0;
+  border-top: 1px solid rgba(251, 246, 234, 0.14);
 }
 .session-info .label {
-  font-size: 11px;
-  color: var(--color-text-muted);
-  margin-bottom: 4px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: rgba(251, 246, 234, 0.45);
+  margin-bottom: 8px;
 }
 .session-id {
-  font-size: 12px;
-  color: var(--color-text);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: rgba(251, 246, 234, 0.8);
   word-break: break-all;
-  max-height: 40px;
+  max-height: 44px;
   overflow: hidden;
-  margin-bottom: 8px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  border: 1px dashed rgba(251, 246, 234, 0.28);
+  border-radius: 5px;
+  margin-bottom: 12px;
 }
 .btn-new {
   width: 100%;
-  padding: 8px;
-  border: 1px dashed var(--color-border);
-  background: transparent;
-  border-radius: 8px;
+  padding: 10px;
+  background: var(--paper-bright);
+  color: var(--ink-strong);
+  border: none;
+  border-radius: 5px;
   cursor: pointer;
-  color: var(--color-text);
   font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  transition: background 0.18s ease, transform 0.18s ease;
 }
 .btn-new:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  background: #fff;
+  transform: translateY(-1px);
+}
+.btn-new:active {
+  transform: translateY(0);
 }
 </style>

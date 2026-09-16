@@ -34,43 +34,57 @@ async function clearSession(id: string) {
 
 <template>
   <div class="sessions-view">
-    <header class="page-header">
-      <h2>会话管理</h2>
-      <button class="btn" @click="sessionsStore.loadList()" :disabled="sessionsStore.loading">
-        刷新列表
-      </button>
+    <header class="page-head">
+      <div class="title-block">
+        <p class="eyebrow">ARCHIVE · 档案室</p>
+        <h2>会话管理</h2>
+      </div>
+      <div class="actions">
+        <button class="btn" @click="sessionsStore.loadList()" :disabled="sessionsStore.loading">
+          刷新名录
+        </button>
+      </div>
     </header>
+    <div class="page-rule"></div>
 
     <div class="sessions-body">
       <section class="session-list">
         <div v-if="sessionsStore.loading && sessionsStore.sessions.length === 0" class="loading">
-          加载中…
+          调取档案中…
         </div>
         <div v-else-if="sessionsStore.sessions.length === 0" class="empty">
-          暂无会话，去聊天页开始第一轮对话吧。
+          <div class="empty-seal">空</div>
+          暂无会话，去答题纸开始第一轮对话吧。
         </div>
-        <ul v-else>
+        <ul v-else class="session-cards">
           <li
             v-for="id in sessionsStore.sessions"
             :key="id"
-            class="session-item"
+            class="session-card"
             :class="{ active: sessionsStore.current === id }"
           >
+            <div class="card-top">
+              <span class="exam-no">准考证</span>
+              <span v-if="sessionsStore.current === id" class="current-mark">在座</span>
+            </div>
             <div class="sid" :title="id">{{ id }}</div>
             <div class="ops">
-              <button @click="viewHistory(id)">查看历史</button>
-              <button class="primary" @click="switchAndChat(id)">载入聊天</button>
-              <button class="danger" @click="clearSession(id)">清空</button>
+              <button @click="viewHistory(id)">查阅笔录</button>
+              <button class="primary" @click="switchAndChat(id)">重新入场</button>
+              <button class="danger" @click="clearSession(id)">销毁记录</button>
             </div>
           </li>
         </ul>
       </section>
 
       <section class="history-panel">
-        <h3>历史消息</h3>
-        <div v-if="sessionsStore.loading" class="loading">加载中…</div>
+        <div class="panel-title">
+          <span class="stamp-mini">录</span>
+          <h3>历史笔录</h3>
+        </div>
+        <div v-if="sessionsStore.loading" class="loading">调取中…</div>
         <div v-else-if="sessionsStore.history.length === 0" class="empty">
-          选择左侧会话查看历史消息
+          选择左侧档案，查阅当时的问答笔录
         </div>
         <div v-else class="history-list">
           <MessageBubble
@@ -91,41 +105,75 @@ async function clearSession(id: string) {
   height: 100vh;
   flex: 1;
   min-width: 0;
+  position: relative;
+  z-index: 1;
 }
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--color-border);
-}
-.page-header h2 { margin: 0; font-size: 16px; }
 .sessions-body {
   flex: 1;
   display: flex;
   min-height: 0;
 }
+
+/* 档案名录 */
 .session-list {
-  flex: 0 0 320px;
-  border-right: 1px solid var(--color-border);
+  flex: 0 0 348px;
+  border-right: 1px solid var(--rule-strong);
   overflow-y: auto;
-  padding: 12px;
+  padding: 18px 16px;
+  background: rgba(42, 36, 29, 0.025);
 }
-.session-item {
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
-  margin-bottom: 10px;
-  background: var(--color-bg);
+.session-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.session-item.active {
-  border-color: var(--color-primary);
+.session-card {
+  padding: 13px 14px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--paper-raise);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+.session-card:hover {
+  border-color: var(--rule-strong);
+  transform: translateY(-1px);
+}
+.session-card.active {
+  border-color: var(--cinnabar);
+  box-shadow: -3px 0 0 var(--cinnabar);
+}
+.card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 7px;
+}
+.exam-no {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: var(--ink-soft);
+}
+.card-top .current-mark {
+  font-family: var(--serif);
+  font-size: 10.5px;
+  letter-spacing: 0.2em;
+  color: var(--cinnabar);
+  border: 1.5px solid var(--cinnabar);
+  border-radius: 3px;
+  padding: 2px 6px;
+  transform: rotate(-3deg);
 }
 .sid {
-  font-size: 13px;
+  font-family: var(--mono);
+  font-size: 12.5px;
   word-break: break-all;
-  margin-bottom: 8px;
-  color: var(--color-text);
+  margin-bottom: 10px;
+  color: var(--ink-strong);
+  line-height: 1.55;
 }
 .ops {
   display: flex;
@@ -133,39 +181,101 @@ async function clearSession(id: string) {
   flex-wrap: wrap;
 }
 .ops button {
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg);
+  appearance: none;
+  padding: 5px 11px;
+  border-radius: 4px;
+  border: 1px solid var(--rule-strong);
+  background: transparent;
   cursor: pointer;
   font-size: 12px;
+  color: var(--ink);
+  letter-spacing: 0.06em;
+  transition: all 0.16s ease;
+}
+.ops button:hover {
+  border-color: var(--ink);
+  background: rgba(42, 36, 29, 0.05);
 }
 .ops button.primary {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
+  background: var(--ink);
+  color: var(--paper-bright);
+  border-color: var(--ink);
+}
+.ops button.primary:hover {
+  background: var(--ink-strong);
 }
 .ops button.danger {
-  color: var(--color-danger);
-  border-color: var(--color-danger);
+  color: var(--cinnabar);
+  border-color: rgba(176, 58, 43, 0.45);
 }
+.ops button.danger:hover {
+  border-color: var(--cinnabar);
+  background: var(--cinnabar-wash);
+}
+
+/* 笔录面板 */
 .history-panel {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 20px;
+  padding: 20px 32px 28px;
 }
-.history-panel h3 {
-  margin: 0 0 16px;
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rule);
+}
+.panel-title .stamp-mini {
+  width: 26px;
+  height: 26px;
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cinnabar);
+  border: 1.5px solid var(--cinnabar);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(-3deg);
+}
+.panel-title h3 {
+  margin: 0;
+  font-family: var(--serif);
   font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--ink-strong);
 }
 .history-list {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 26px;
+  max-width: 860px;
 }
-.loading, .empty {
-  color: var(--color-text-muted);
-  padding: 24px;
+.loading,
+.empty {
+  color: var(--ink-soft);
+  padding: 40px 24px;
   text-align: center;
+  font-size: 13.5px;
+  letter-spacing: 0.06em;
+}
+.empty-seal {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 14px;
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  border: 1.5px dashed var(--rule-strong);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: rotate(-4deg);
 }
 </style>

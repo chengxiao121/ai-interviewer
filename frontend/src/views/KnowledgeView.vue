@@ -12,29 +12,39 @@ onMounted(() => {
 
 <template>
   <div class="knowledge-view">
-    <header class="page-header">
-      <h2>知识库管理</h2>
+    <header class="page-head">
+      <div class="title-block">
+        <p class="eyebrow">QUESTION BANK · 题库</p>
+        <h2>知识库管理</h2>
+      </div>
       <div class="actions">
         <button class="btn" @click="knowledgeStore.loadDocs()" :disabled="knowledgeStore.loading">
           刷新
         </button>
-        <button class="btn primary" @click="knowledgeStore.sync()" :disabled="knowledgeStore.syncing">
-          {{ knowledgeStore.syncing ? '同步中…' : '同步知识库' }}
+        <button class="btn ink" @click="knowledgeStore.sync()" :disabled="knowledgeStore.syncing">
+          {{ knowledgeStore.syncing ? '誊录入库中…' : '同步知识库' }}
         </button>
       </div>
     </header>
-
-    <div v-if="knowledgeStore.lastSyncResult" class="sync-result">
-      ✅ {{ knowledgeStore.lastSyncResult.message }}，共 {{ knowledgeStore.lastSyncResult.totalDocuments }} 个文档
-    </div>
-    <div v-if="knowledgeStore.error" class="error-bar">{{ knowledgeStore.error }}</div>
+    <div class="page-rule"></div>
 
     <div class="table-wrap">
-      <DocTable :documents="knowledgeStore.documents" />
-    </div>
+      <div v-if="knowledgeStore.lastSyncResult" class="sync-result">
+        <span class="mark">✓</span>
+        {{ knowledgeStore.lastSyncResult.message }}，共 {{ knowledgeStore.lastSyncResult.totalDocuments }} 个文档
+      </div>
+      <div v-if="knowledgeStore.error" class="error-bar">
+        <span class="mark">※</span>{{ knowledgeStore.error }}
+      </div>
 
-    <div class="tip">
-      <p>说明：同步会扫描外部目录 <code>./data/knowledges/</code> 与 classpath 兜底题库，幂等入库（内容哈希未变则跳过），并增量删除已移除的文档。</p>
+      <div class="paper-card">
+        <DocTable :documents="knowledgeStore.documents" />
+      </div>
+
+      <div class="tip">
+        <div class="tip-title">备注 · REMARKS</div>
+        <p>同步会扫描外部目录 <code>./data/knowledges/</code> 与 classpath 兜底题库，幂等入库（内容哈希未变则跳过），并增量删除已移除的文档。</p>
+      </div>
     </div>
   </div>
 </template>
@@ -46,60 +56,69 @@ onMounted(() => {
   height: 100vh;
   flex: 1;
   min-width: 0;
-}
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--color-border);
-}
-.page-header h2 { margin: 0; font-size: 16px; }
-.actions { display: flex; gap: 10px; }
-.btn {
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border);
-  background: var(--color-bg);
-  cursor: pointer;
-  font-size: 14px;
-}
-.btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.btn.primary {
-  background: var(--color-primary);
-  color: #fff;
-  border-color: var(--color-primary);
-}
-.sync-result {
-  margin: 12px 20px 0;
-  padding: 10px 14px;
-  background: rgba(34, 197, 94, 0.1);
-  color: #16a34a;
-  border-radius: 8px;
-  font-size: 14px;
-}
-.error-bar {
-  margin: 12px 20px 0;
-  padding: 10px 14px;
-  background: rgba(239, 68, 68, 0.1);
-  color: var(--color-danger);
-  border-radius: 8px;
-  font-size: 14px;
+  position: relative;
+  z-index: 1;
 }
 .table-wrap {
   flex: 1;
   overflow: auto;
-  padding: 16px 20px;
+  padding: 24px 32px 20px;
+}
+.sync-result,
+.error-bar {
+  max-width: 960px;
+  margin: 0 0 14px;
+  padding: 11px 16px;
+  border-radius: 4px;
+  font-size: 13.5px;
+  letter-spacing: 0.02em;
+}
+.sync-result {
+  background: var(--green-wash);
+  border-left: 3px solid var(--green);
+  color: var(--green);
+}
+.error-bar {
+  background: var(--cinnabar-wash);
+  border-left: 3px solid var(--cinnabar);
+  color: var(--cinnabar-deep);
+}
+.sync-result .mark,
+.error-bar .mark {
+  margin-right: 10px;
+  font-weight: 700;
+}
+.paper-card {
+  max-width: 960px;
+  background: var(--paper-raise);
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 3px 14px rgba(42, 36, 29, 0.07);
 }
 .tip {
-  padding: 12px 20px;
-  border-top: 1px solid var(--color-border);
-  color: var(--color-text-muted);
+  max-width: 960px;
+  margin-top: 18px;
+  padding: 14px 18px;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 6px;
+  color: var(--ink-soft);
   font-size: 13px;
+  line-height: 1.7;
+}
+.tip-title {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.26em;
+  color: var(--cinnabar);
+  margin-bottom: 6px;
 }
 .tip code {
-  background: var(--color-bg-soft);
-  padding: 1px 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--paper-deep);
+  padding: 1px 7px;
   border-radius: 4px;
+  color: var(--cinnabar-deep);
 }
 </style>

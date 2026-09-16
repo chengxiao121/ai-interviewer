@@ -35,7 +35,13 @@ public class KnowledgeBaseService {
         this.repository = repository;
         this.vectorStore = vectorStore;
         this.resourcePatternResolver = resourcePatternResolver;
-        this.splitter = new TokenTextSplitter();   // 默认 cl100k_base 分词，约 800 token/块
+        // 题库是「【考点】+【参考答案】」问答结构，默认 800 token/块会把多道题揉进一个向量块，
+        // 检索粒度太粗；降到 ~300 token 让一块基本只含 1~2 道题。该分块器切分时会优先落在 \n 边界，
+        // 与题库"空行分隔题目"的格式配合；minChunkSizeChars=100 保证块内边界太靠前时宁可取满整块。
+        this.splitter = TokenTextSplitter.builder()
+                .withChunkSize(300)
+                .withMinChunkSizeChars(100)
+                .build();
     }
 
     /**

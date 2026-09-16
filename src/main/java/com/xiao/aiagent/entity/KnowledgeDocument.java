@@ -27,7 +27,7 @@ public class KnowledgeDocument {
     @Column(nullable = false)
     private Integer chunkCount;
 
-    /** 文件内容 SHA-256 哈希，内容不变则跳过入库 */
+    /** 文件内容 MD5 哈希（32 位十六进制），内容不变则跳过入库 */
     @Column(nullable = false, length = 64)
     private String contentHash;
 
