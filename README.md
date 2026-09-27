@@ -4,7 +4,7 @@
 
 > 产品立场：不是聊天陪练，是**可验证的能力评估**。报告可信在结构上要求五件事：范围契约（面试计划）、考官与评分分离、考点词表封闭、证据可溯（逐题留痕）、跨场次采样聚合。另一条全局设计判据：**LLM 调用 ≠ Agent**——只有需要工具循环/临场决策的环节才用 ReactAgent（面试官 + 3 个分析官），规划/评估/报告都是"带 LLM 的普通函数"。
 
-## ✨ 核心功能
+## 核心功能
 
 - ** AI 模拟面试**：ReactAgent 面试官按《面试计划》逐轮出题、追问、点评，SSE 流式输出
 - ** 多资料画像**：JD 分析官 / 简历分析官 / 代码分析官并行运行（MCP 只读读取本地资料），产出结构化清单落库，作为出题依据
@@ -17,7 +17,7 @@
 - **️ MCP 工具生态**：MCP Client 接入官方 Filesystem Server（只读过滤），支持"代码评审式面试"
 - ** 会话与知识库管理**：多会话管理、历史回看/载入/清空；知识库文档同步、分块、幂等入库
 
-## 🏗️ 系统架构
+## 系统架构
 
 ```mermaid
 flowchart TB
@@ -55,7 +55,7 @@ flowchart TB
     CP & IP & SR --> PG[("PostgreSQL<br/>业务数据 + 评分留痕")]
 ```
 
-## 🔄 核心流程（一次资料面试会话）
+## 核心流程（一次资料面试会话）
 
 ```mermaid
 sequenceDiagram
@@ -107,7 +107,7 @@ sequenceDiagram
 | 流式解析 | 自写 SSE 解析器（fetch + ReadableStream） | POST 流式，支持打字机效果 |
 | 样式 | 自写轻量 CSS（CSS 变量） | 不引重型 UI 库，可控干净 |
 
-## 📁 项目结构
+## 项目结构
 
 ```
 ├── src/main/java/com/xiao/aiagent/
@@ -123,7 +123,7 @@ sequenceDiagram
 └── docker-compose.yml     # PostgreSQL / Redis Stack 本地依赖
 ```
 
-## 🚀 快速开始
+## 快速开始
 
 ### 1. 启动依赖（PostgreSQL + Redis Stack）
 
@@ -173,7 +173,7 @@ cd frontend && npm run build
 # 访问 http://localhost:8080/ 即前端，/api/* 同源无跨域
 ```
 
-## 🔐 安全说明
+## 安全说明
 
 - 仓库内不含任何真实密钥：`application.properties` 只留 `${DASHSCOPE_API_KEY:}` 占位符，真实 Key 放在 gitignore 的 `application-local.properties` 或环境变量中
 - `data/`（外部知识库）、`test-http/`、`.verify-payloads/` 等本地调试产物均不入库
