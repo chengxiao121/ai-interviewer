@@ -41,7 +41,22 @@ export function postSse(opts: SseOptions): AbortController {
   })
     .then(async (resp) => {
       if (!resp.ok || !resp.body) {
-        throw new Error(`SSE 请求失败：${resp.status} ${resp.statusText}`)
+        // 后端 400 等错误体带 message（server.error.include-message=always），尽量透传中文原因
+        let detail = `${resp.status} ${resp.statusText}`
+        try {
+          const text = await resp.text()
+          if (text) {
+            try {
+              const parsed = JSON.parse(text) as { message?: string }
+              detail = parsed.message || text.slice(0, 200)
+            } catch {
+              detail = text.slice(0, 200)
+            }
+          }
+        } catch {
+          /* 忽略错误体读取失败 */
+        }
+        throw new Error(`请求失败：${detail}`)
       }
       const reader = resp.body.getReader()
       const decoder = new TextDecoder('utf-8')

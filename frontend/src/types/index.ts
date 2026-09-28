@@ -41,3 +41,21 @@ export interface MaterialUploadResult {
   charCount: number
   duplicated: boolean
 }
+
+/** 历史简历元数据（GET /api/materials/resumes，入场页"继续之前的简历"用） */
+export interface ResumeMeta {
+  materialId: string
+  type: string
+  fileName: string
+  md5: string
+  charCount: number
+  createdAt: string
+}
+
+/** 面试会话绑定（GET /api/interview-sessions）：会话与候选人/资料的持久关系 */
+export interface InterviewSessionDto {
+  sessionId: string
+  candidateId: string
+  materialIds: string[]
+  createdAt: string
+}

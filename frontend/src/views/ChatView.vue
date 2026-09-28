@@ -3,6 +3,8 @@ import { ref, watch, nextTick, computed } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import MessageBubble from '@/components/MessageBubble.vue'
 import ChatInput from '@/components/ChatInput.vue'
+import EntryForm from '@/components/EntryForm.vue'
+import type { InterviewEntry } from '@/stores/chat'
 
 const chatStore = useChatStore()
 const scrollRef = ref<HTMLDivElement | null>(null)
@@ -21,14 +23,17 @@ watch(
   },
 )
 
-function onSend(text: string, materialIds?: string[], materialNames?: string[]) {
-  chatStore.send(text, materialIds, materialNames)
+function onSend(text: string) {
+  chatStore.send(text)
 }
 function onAbort() {
   chatStore.abort()
 }
+function onStart(entry: InterviewEntry) {
+  chatStore.startInterview(entry)
+}
 
-// 开场示例问题，点击即开始
+// 开场示例问题，点击即开始（入场完成后可见）
 const starters = [
   { tag: 'JAVA', text: '来一道 Java 并发题' },
   { tag: 'REDIS', text: '追问一下 Redis 缓存三大问题' },
@@ -43,7 +48,12 @@ const starters = [
         <p class="eyebrow">LIVE · 面试进行中</p>
         <h2>面试对话</h2>
       </div>
-      <span class="session-tag" :title="chatStore.sessionId">NO. {{ chatStore.sessionId }}</span>
+      <div class="head-tags">
+        <span v-if="chatStore.candidateName" class="candidate-tag" title="候选人">
+          {{ chatStore.candidateName }}
+        </span>
+        <span class="session-tag" :title="chatStore.sessionId">NO. {{ chatStore.sessionId }}</span>
+      </div>
     </header>
     <div class="page-rule"></div>
 
@@ -56,10 +66,10 @@ const starters = [
           :streaming="streamingLast && i === chatStore.messages.length - 1 && msg.role === 'assistant'"
         />
       </template>
+      <EntryForm v-else-if="chatStore.entryNeeded" @start="onStart" />
       <div v-else class="welcome">
-        <div class="seal">面</div>
-        <h3>模拟面试，现在开始</h3>
-        <p class="sub">面试官已就位。说出你的方向，或从下面的推荐问题开始。</p>
+        <h3>入场完成，面试官已就位</h3>
+        <p class="sub">候选人：{{ chatStore.candidateName }}。说出你的方向，或从下面的推荐问题开始。</p>
         <div class="starters">
           <button
             v-for="s in starters"
@@ -98,6 +108,21 @@ const starters = [
   position: relative;
   z-index: 1;
 }
+.head-tags {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.candidate-tag {
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--cinnabar);
+  border: 1.5px solid var(--cinnabar);
+  border-radius: 4px;
+  padding: 3px 10px;
+}
 .session-tag {
   font-family: var(--mono);
   font-size: 11px;
@@ -119,7 +144,7 @@ const starters = [
   gap: 26px;
 }
 
-/* 欢迎页：面试开场 */
+/* 欢迎页：入场完成后的开场 */
 .welcome {
   margin: auto;
   max-width: 560px;
@@ -127,22 +152,6 @@ const starters = [
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-.seal {
-  width: 72px;
-  height: 72px;
-  background: var(--cinnabar);
-  color: #fdf4e7;
-  font-family: var(--serif);
-  font-size: 44px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 16px;
-  box-shadow: inset 0 0 0 2px rgba(253, 244, 231, 0.35), 0 6px 18px rgba(143, 44, 32, 0.22);
-  margin-bottom: 26px;
-  animation: rise 0.5s ease both;
 }
 .welcome h3 {
   margin: 0;
