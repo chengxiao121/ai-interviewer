@@ -16,8 +16,8 @@ export interface InterviewEntry {
  * 唯一状态来源，view 只消费和派发 action。
  */
 export const useChatStore = defineStore('chat', () => {
-  /** 当前会话 id（默认 default） */
-  const sessionId = ref<string>('default')
+/** 当前会话 id（初始即生成新 UUID：入场绑定制下 "default" 固定会话会永久占用候选人身份） */
+const sessionId = ref<string>(generateSessionId())
   /** 当前会话消息列表 */
   const messages = ref<ChatMessage[]>([])
   /** 是否正在生成 */
