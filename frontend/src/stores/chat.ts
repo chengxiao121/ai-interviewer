@@ -37,13 +37,21 @@ export const useChatStore = defineStore('chat', () => {
     error.value = ''
   }
 
-  /** 发送消息：推入 user 消息后流式追加 assistant 消息 */
-  function send(text: string) {
+  /**
+   * 发送消息：推入 user 消息后流式追加 assistant 消息。
+   * @param text 消息文本（只传资料不打字时由调用方给默认开场句）
+   * @param materialIds 可选：上传资料 id（带则后端直通资料流水线）
+   * @param materialNames 可选：资料文件名（仅用于本地气泡展示 📎 前缀）
+   */
+  function send(text: string, materialIds?: string[], materialNames?: string[]) {
     const content = text.trim()
     if (!content || streaming.value) return
 
-    // 推入用户消息
-    messages.value.push({ role: 'user', content })
+    // 推入用户消息（附资料时加 📎 前缀，仅本地展示；后端记忆里只存原话）
+    const display = materialNames && materialNames.length > 0
+      ? `📎 ${materialNames.join('、')}\n\n${content}`
+      : content
+    messages.value.push({ role: 'user', content: display })
     // 占位 assistant 消息，流式追加
     const assistantMsg = ref<ChatMessage>({ role: 'assistant', content: '' })
     messages.value.push(assistantMsg.value)
@@ -75,6 +83,7 @@ export const useChatStore = defineStore('chat', () => {
           messages.value.pop()
         }
       },
+      materialIds,
     )
   }
 

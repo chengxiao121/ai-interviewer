@@ -32,3 +32,12 @@ export interface KnowledgeDoc {
   source: string // EXTERNAL / CLASSPATH
   ingestedAt: string // ISO 字符串
 }
+
+/** 上传资料（JD/简历）结果：materialId 供聊天请求引用 */
+export interface MaterialUploadResult {
+  materialId: string
+  type: 'JD' | 'RESUME'
+  fileName: string
+  charCount: number
+  duplicated: boolean
+}

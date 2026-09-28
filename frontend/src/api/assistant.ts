@@ -9,6 +9,7 @@ import type { HistoryMessageDto, ClearResult } from '@/types'
  * @param onChunk 每收到一片文本回调
  * @param onDone 流结束
  * @param onError 出错
+ * @param materialIds 可选：上传资料 id 列表（带则直通资料流水线，跳过意图路由）
  * @returns AbortController，可中断
  */
 export function chatSse(
@@ -17,10 +18,15 @@ export function chatSse(
   onChunk: (text: string) => void,
   onDone?: () => void,
   onError?: (err: Error) => void,
+  materialIds?: string[],
 ): AbortController {
   return postSse({
     url: sseUrl('/assistant/chat'),
-    body: { userMessage, sessionId },
+    body: {
+      userMessage,
+      sessionId,
+      ...(materialIds && materialIds.length > 0 ? { materialIds } : {}),
+    },
     onChunk,
     onDone,
     onError,

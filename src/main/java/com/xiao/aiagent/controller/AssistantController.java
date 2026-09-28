@@ -9,6 +9,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Flux;
 
+import java.util.List;
+
 @RequestMapping("/api/assistant")
 @RestController
 public class AssistantController {
@@ -42,11 +44,18 @@ public class AssistantController {
         String candidateId = (request.candidateId() == null || request.candidateId().isBlank())
                 ? SessionKeys.DEFAULT_CANDIDATE_ID
                 : request.candidateId();
+        // 阶段 7：带上传资料 → 直通资料流水线（类型/文本已在上传时锁定，跳过三道关口）；
+        // 不带 → 走既有三道关口路由。两路互斥覆盖全部入口。
+        if (request.materialIds() != null && !request.materialIds().isEmpty()) {
+            return agentRouter.chatWithMaterials(
+                    request.userMessage(), request.materialIds(), request.sessionId(), candidateId);
+        }
         return agentRouter.chat(request.userMessage(), request.sessionId(), candidateId);
     }
 
-    /** chat 请求体 */
-    public record ChatRequest(String userMessage, String sessionId, String candidateId) {
+    /** chat 请求体（materialIds 可选：上传资料 id 列表，来自 /api/materials/upload） */
+    public record ChatRequest(String userMessage, String sessionId, String candidateId,
+                              List<String> materialIds) {
     }
 
 }
