@@ -45,7 +45,7 @@ const statusLabel: Record<string, string> = {
         <td class="time">{{ formatTime(doc.ingestedAt) }}</td>
       </tr>
       <tr v-if="documents.length === 0">
-        <td colspan="5" class="empty">卷面空白 —— 点击上方「同步知识库」完成誊录</td>
+        <td colspan="5" class="empty">暂无文档 —— 点击上方「同步知识库」完成入库</td>
       </tr>
     </tbody>
   </table>
@@ -106,16 +106,15 @@ const statusLabel: Record<string, string> = {
   padding: 40px 20px;
   letter-spacing: 0.08em;
 }
-/* 状态印章 */
+/* 状态标签 */
 .status {
   display: inline-block;
   padding: 3px 10px;
-  border-radius: 3px;
+  border-radius: 4px;
   font-family: var(--serif);
   font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.14em;
-  transform: rotate(-2deg);
 }
 .status.ingested {
   color: var(--green);

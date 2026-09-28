@@ -27,7 +27,7 @@ const renderedHtml = computed(() => {
     <div class="stamp">{{ message.role === 'user' ? '答' : '问' }}</div>
     <div class="body">
       <div class="meta">
-        <span class="role">{{ message.role === 'user' ? '求职者 · CANDIDATE' : '面试官 · EXAMINER' }}</span>
+        <span class="role">{{ message.role === 'user' ? '求职者 · CANDIDATE' : '面试官 · INTERVIEWER' }}</span>
       </div>
       <div class="content">
         <template v-if="message.content">
@@ -51,12 +51,12 @@ const renderedHtml = computed(() => {
   animation: rise 0.4s ease both;
 }
 
-/* 问/答印章 */
+/* 问/答角色徽标：去印章化的干净小方块 */
 .stamp {
   flex: 0 0 44px;
   width: 44px;
   height: 44px;
-  border-radius: 6px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -69,14 +69,12 @@ const renderedHtml = computed(() => {
   color: var(--cinnabar);
   border: 2px solid var(--cinnabar);
   background: transparent;
-  transform: rotate(-3deg);
-  box-shadow: inset 0 0 0 1px rgba(176, 58, 43, 0.25);
+  box-shadow: none;
 }
 .entry.user .stamp {
   background: var(--ink-blue);
   color: var(--paper-bright);
-  transform: rotate(2deg);
-  box-shadow: 0 1px 3px rgba(44, 61, 87, 0.3);
+  box-shadow: 0 1px 3px rgba(44, 61, 87, 0.25);
 }
 
 .body {
@@ -97,7 +95,7 @@ const renderedHtml = computed(() => {
   color: rgba(44, 61, 87, 0.66);
 }
 
-/* 面试官：印在纸面上；求职者：粘贴的作答条 */
+/* 面试官：印在纸面上；求职者：回答条 */
 .content {
   position: relative;
   padding: 4px 2px;
@@ -151,7 +149,7 @@ const renderedHtml = computed(() => {
   to { opacity: 0; }
 }
 
-/* ---------- Markdown 笔录排版 ---------- */
+/* ---------- Markdown 内容排版 ---------- */
 .markdown-body :deep(*) {
   margin: 0;
   padding: 0;
@@ -248,7 +246,7 @@ const renderedHtml = computed(() => {
   border-top: 1px dashed var(--rule-strong);
 }
 
-/* 用户手写条内的代码恢复墨色，避免蓝底红字冲突 */
+/* 用户回答条内的代码恢复墨色，避免蓝底红字冲突 */
 .entry.user .markdown-body :deep(code) {
   color: var(--ink-blue);
   background: rgba(44, 61, 87, 0.08);

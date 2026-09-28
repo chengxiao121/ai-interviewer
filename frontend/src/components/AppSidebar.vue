@@ -6,9 +6,9 @@ const route = useRoute()
 const chatStore = useChatStore()
 
 const nav = [
-  { name: 'chat', label: '面试对话', en: 'TRANSCRIPT', path: '/chat' },
-  { name: 'sessions', label: '会话管理', en: 'ARCHIVE', path: '/sessions' },
-  { name: 'knowledge', label: '知识库', en: 'QUESTION BANK', path: '/knowledge' },
+  { name: 'chat', label: '面试对话', en: 'INTERVIEW', path: '/chat' },
+  { name: 'sessions', label: '会话管理', en: 'SESSIONS', path: '/sessions' },
+  { name: 'knowledge', label: '知识库', en: 'KNOWLEDGE', path: '/knowledge' },
 ]
 </script>
 
@@ -18,7 +18,7 @@ const nav = [
       <div class="seal">面</div>
       <div class="brand-text">
         <div class="name">AI 面试官</div>
-        <div class="caption">MOCK INTERVIEW · DOSSIER</div>
+        <div class="caption">MOCK INTERVIEW · STUDIO</div>
       </div>
     </div>
 
@@ -39,9 +39,9 @@ const nav = [
     </nav>
 
     <div class="session-info">
-      <div class="label">当前会话 · SESSION NO.</div>
+      <div class="label">当前会话 · SESSION</div>
       <div class="session-id" :title="chatStore.sessionId">{{ chatStore.sessionId }}</div>
-      <button class="btn-new" @click="chatStore.newSession()">＋ 开新卷</button>
+      <button class="btn-new" @click="chatStore.newSession()">＋ 新面试</button>
     </div>
   </aside>
 </template>
@@ -77,6 +77,7 @@ const nav = [
   gap: 12px;
   padding: 0 6px 26px;
 }
+/* 品牌徽标：干净的圆角方块 */
 .seal {
   flex: 0 0 40px;
   width: 40px;
@@ -89,14 +90,9 @@ const nav = [
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 7px;
-  transform: rotate(-4deg);
-  box-shadow: inset 0 0 0 1.5px rgba(253, 244, 231, 0.55),
-    0 2px 6px rgba(0, 0, 0, 0.35);
-  transition: transform 0.25s ease;
-}
-.sidebar:hover .seal {
-  transform: rotate(0deg);
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1.5px rgba(253, 244, 231, 0.35),
+    0 2px 6px rgba(0, 0, 0, 0.25);
 }
 .brand-text .name {
   font-family: var(--serif);

@@ -28,9 +28,9 @@ function onAbort() {
   chatStore.abort()
 }
 
-// 开场示例题，点击即作答
+// 开场示例问题，点击即开始
 const starters = [
-  { tag: 'JAVA', text: '考我一道 Java 并发题' },
+  { tag: 'JAVA', text: '来一道 Java 并发题' },
   { tag: 'REDIS', text: '追问一下 Redis 缓存三大问题' },
   { tag: 'HR', text: '开始一轮 HR 面模拟' },
 ]
@@ -40,7 +40,7 @@ const starters = [
   <div class="chat-view">
     <header class="page-head">
       <div class="title-block">
-        <p class="eyebrow">TRANSCRIPT · 答题纸</p>
+        <p class="eyebrow">LIVE · 面试进行中</p>
         <h2>面试对话</h2>
       </div>
       <span class="session-tag" :title="chatStore.sessionId">NO. {{ chatStore.sessionId }}</span>
@@ -59,7 +59,7 @@ const starters = [
       <div v-else class="welcome">
         <div class="seal">面</div>
         <h3>模拟面试，现在开始</h3>
-        <p class="sub">考官已就座。提出你的要求，或从下方试题中任选一道。</p>
+        <p class="sub">面试官已就位。说出你的方向，或从下面的推荐问题开始。</p>
         <div class="starters">
           <button
             v-for="s in starters"
@@ -71,7 +71,7 @@ const starters = [
             <span class="text">{{ s.text }}</span>
           </button>
         </div>
-        <p class="hint">Enter 发送 · Shift + Enter 换行 · 可随时「停止」打断考官</p>
+        <p class="hint">Enter 发送 · Shift + Enter 换行 · 可随时「停止」打断面试官</p>
       </div>
     </div>
 
@@ -119,7 +119,7 @@ const starters = [
   gap: 26px;
 }
 
-/* 欢迎页：考生须知 */
+/* 欢迎页：面试开场 */
 .welcome {
   margin: auto;
   max-width: 560px;
@@ -139,21 +139,10 @@ const starters = [
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 12px;
-  transform: rotate(-5deg);
-  box-shadow: inset 0 0 0 2.5px rgba(253, 244, 231, 0.5), 0 6px 18px rgba(143, 44, 32, 0.28);
+  border-radius: 16px;
+  box-shadow: inset 0 0 0 2px rgba(253, 244, 231, 0.35), 0 6px 18px rgba(143, 44, 32, 0.22);
   margin-bottom: 26px;
-  animation: stamp-in 0.5s cubic-bezier(0.2, 1.6, 0.4, 1) both;
-}
-@keyframes stamp-in {
-  from {
-    opacity: 0;
-    transform: rotate(6deg) scale(1.7);
-  }
-  to {
-    opacity: 1;
-    transform: rotate(-5deg) scale(1);
-  }
+  animation: rise 0.5s ease both;
 }
 .welcome h3 {
   margin: 0;

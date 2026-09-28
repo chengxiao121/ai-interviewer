@@ -36,12 +36,12 @@ async function clearSession(id: string) {
   <div class="sessions-view">
     <header class="page-head">
       <div class="title-block">
-        <p class="eyebrow">ARCHIVE · 档案室</p>
+        <p class="eyebrow">HISTORY · 历史会话</p>
         <h2>会话管理</h2>
       </div>
       <div class="actions">
         <button class="btn" @click="sessionsStore.loadList()" :disabled="sessionsStore.loading">
-          刷新名录
+          刷新列表
         </button>
       </div>
     </header>
@@ -50,11 +50,11 @@ async function clearSession(id: string) {
     <div class="sessions-body">
       <section class="session-list">
         <div v-if="sessionsStore.loading && sessionsStore.sessions.length === 0" class="loading">
-          调取档案中…
+          加载中…
         </div>
         <div v-else-if="sessionsStore.sessions.length === 0" class="empty">
           <div class="empty-seal">空</div>
-          暂无会话，去答题纸开始第一轮对话吧。
+          暂无会话，去「面试对话」开始第一轮吧。
         </div>
         <ul v-else class="session-cards">
           <li
@@ -64,14 +64,14 @@ async function clearSession(id: string) {
             :class="{ active: sessionsStore.current === id }"
           >
             <div class="card-top">
-              <span class="exam-no">准考证</span>
-              <span v-if="sessionsStore.current === id" class="current-mark">在座</span>
+              <span class="exam-no">会话</span>
+              <span v-if="sessionsStore.current === id" class="current-mark">进行中</span>
             </div>
             <div class="sid" :title="id">{{ id }}</div>
             <div class="ops">
-              <button @click="viewHistory(id)">查阅笔录</button>
-              <button class="primary" @click="switchAndChat(id)">重新入场</button>
-              <button class="danger" @click="clearSession(id)">销毁记录</button>
+              <button @click="viewHistory(id)">查看记录</button>
+              <button class="primary" @click="switchAndChat(id)">继续对话</button>
+              <button class="danger" @click="clearSession(id)">删除会话</button>
             </div>
           </li>
         </ul>
@@ -80,11 +80,11 @@ async function clearSession(id: string) {
       <section class="history-panel">
         <div class="panel-title">
           <span class="stamp-mini">录</span>
-          <h3>历史笔录</h3>
+          <h3>聊天记录</h3>
         </div>
-        <div v-if="sessionsStore.loading" class="loading">调取中…</div>
+        <div v-if="sessionsStore.loading" class="loading">加载中…</div>
         <div v-else-if="sessionsStore.history.length === 0" class="empty">
-          选择左侧档案，查阅当时的问答笔录
+          选择左侧会话，查看当时的问答记录
         </div>
         <div v-else class="history-list">
           <MessageBubble
@@ -114,7 +114,7 @@ async function clearSession(id: string) {
   min-height: 0;
 }
 
-/* 档案名录 */
+/* 会话列表 */
 .session-list {
   flex: 0 0 348px;
   border-right: 1px solid var(--rule-strong);
@@ -163,9 +163,8 @@ async function clearSession(id: string) {
   letter-spacing: 0.2em;
   color: var(--cinnabar);
   border: 1.5px solid var(--cinnabar);
-  border-radius: 3px;
+  border-radius: 4px;
   padding: 2px 6px;
-  transform: rotate(-3deg);
 }
 .sid {
   font-family: var(--mono);
@@ -213,7 +212,7 @@ async function clearSession(id: string) {
   background: var(--cinnabar-wash);
 }
 
-/* 笔录面板 */
+/* 记录面板 */
 .history-panel {
   flex: 1;
   overflow-y: auto;
@@ -235,11 +234,10 @@ async function clearSession(id: string) {
   font-weight: 600;
   color: var(--cinnabar);
   border: 1.5px solid var(--cinnabar);
-  border-radius: 4px;
+  border-radius: 6px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transform: rotate(-3deg);
 }
 .panel-title h3 {
   margin: 0;
@@ -272,10 +270,9 @@ async function clearSession(id: string) {
   font-weight: 600;
   color: var(--ink-soft);
   border: 1.5px dashed var(--rule-strong);
-  border-radius: 6px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  transform: rotate(-4deg);
 }
 </style>

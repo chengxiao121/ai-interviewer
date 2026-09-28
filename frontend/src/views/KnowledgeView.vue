@@ -14,7 +14,7 @@ onMounted(() => {
   <div class="knowledge-view">
     <header class="page-head">
       <div class="title-block">
-        <p class="eyebrow">QUESTION BANK · 题库</p>
+        <p class="eyebrow">KNOWLEDGE · 知识库</p>
         <h2>知识库管理</h2>
       </div>
       <div class="actions">
@@ -22,7 +22,7 @@ onMounted(() => {
           刷新
         </button>
         <button class="btn ink" @click="knowledgeStore.sync()" :disabled="knowledgeStore.syncing">
-          {{ knowledgeStore.syncing ? '誊录入库中…' : '同步知识库' }}
+          {{ knowledgeStore.syncing ? '同步中…' : '同步知识库' }}
         </button>
       </div>
     </header>

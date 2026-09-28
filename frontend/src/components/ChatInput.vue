@@ -43,23 +43,23 @@ function onKeydown(e: KeyboardEvent) {
     <div class="chat-input">
       <div class="input-head">
         <span class="dot"></span>
-        <span class="label">作答区 · ANSWER</span>
+        <span class="label">回答区 · RESPONSE</span>
         <span class="key-hint">Enter 发送 · Shift+Enter 换行</span>
       </div>
       <textarea
         ref="textareaRef"
         v-model="text"
         :disabled="disabled && !streaming"
-        placeholder="在此作答，落笔无悔……"
+        placeholder="输入你的回答，或向面试官提问……"
         rows="1"
         @input="autoResize"
         @keydown="onKeydown"
       ></textarea>
       <div class="input-foot">
         <button v-if="!streaming" class="btn ink send" :disabled="disabled" @click="submit">
-          呈 上 ↵
+          发 送 ↵
         </button>
-        <button v-else class="btn red stop" @click="emit('abort')">■ 停止作答</button>
+        <button v-else class="btn red stop" @click="emit('abort')">■ 结束回答</button>
       </div>
     </div>
   </div>
