@@ -2,11 +2,14 @@ package com.xiao.aiagent.controller;
 
 import com.xiao.aiagent.services.MaterialStoreService;
 import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 上传资料接口（阶段 7 新增）——JD/简历上传直通路径的 HTTP 面。
@@ -46,6 +49,15 @@ public class MaterialController {
                                                     @RequestParam(value = "name", required = false) String name,
                                                     @RequestBody String content) {
         return materialStoreService.save(content, type, name);
+    }
+
+    /**
+     * 历史简历列表（阶段 8 新增）——入场页"继续之前的简历"选项的数据源，
+     * 按上传时间倒序。JD 不提供列表：JD 在入场时只走上传（弱依赖，不常复用）。
+     */
+    @GetMapping("/resumes")
+    public List<MaterialStoreService.MaterialMeta> listResumes() {
+        return materialStoreService.listResumes();
     }
 
 }

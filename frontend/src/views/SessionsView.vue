@@ -67,6 +67,10 @@ async function clearSession(id: string) {
               <span class="exam-no">会话</span>
               <span v-if="sessionsStore.current === id" class="current-mark">进行中</span>
             </div>
+            <div v-if="sessionsStore.candidateBySession[id]" class="card-candidate">
+              <span class="cand-badge">候选人</span>
+              <span class="cand-name">{{ sessionsStore.candidateBySession[id] }}</span>
+            </div>
             <div class="sid" :title="id">{{ id }}</div>
             <div class="ops">
               <button @click="viewHistory(id)">查看记录</button>
@@ -156,6 +160,32 @@ async function clearSession(id: string) {
   font-size: 9px;
   letter-spacing: 0.3em;
   color: var(--ink-soft);
+}
+.card-candidate {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+}
+.card-candidate .cand-badge {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  color: var(--cinnabar);
+  border: 1px solid var(--cinnabar);
+  border-radius: 3px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+}
+.card-candidate .cand-name {
+  font-family: var(--serif);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .card-top .current-mark {
   font-family: var(--serif);

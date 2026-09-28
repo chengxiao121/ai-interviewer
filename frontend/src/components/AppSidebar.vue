@@ -40,6 +40,10 @@ const nav = [
 
     <div class="session-info">
       <div class="label">当前会话 · SESSION</div>
+      <div v-if="chatStore.candidateName" class="candidate-row">
+        <span class="cand-badge">候选人</span>
+        <span class="cand-name" :title="chatStore.candidateName">{{ chatStore.candidateName }}</span>
+      </div>
       <div class="session-id" :title="chatStore.sessionId">{{ chatStore.sessionId }}</div>
       <button class="btn-new" @click="chatStore.newSession()">＋ 新面试</button>
     </div>
@@ -169,6 +173,32 @@ const nav = [
   letter-spacing: 0.18em;
   color: rgba(251, 246, 234, 0.45);
   margin-bottom: 8px;
+}
+.candidate-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.cand-badge {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.16em;
+  color: var(--cinnabar);
+  border: 1px solid var(--cinnabar);
+  border-radius: 3px;
+  padding: 2px 5px;
+  flex-shrink: 0;
+}
+.cand-name {
+  font-family: var(--serif);
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--paper-bright);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .session-id {
   font-family: var(--mono);

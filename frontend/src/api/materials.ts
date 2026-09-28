@@ -2,8 +2,8 @@
 // 类型自动识别：文件名含简历/resume/cv → RESUME，其余（JD/岗位/职位/未识别）→ JD，
 // 识别错了用户可在资料标签上点击切换（切换 = 用另一类型重新上传，服务端按类型+内容哈希去重）。
 
-import { BASE } from './request'
-import type { MaterialUploadResult } from '@/types'
+import { BASE, getJson } from './request'
+import type { MaterialUploadResult, ResumeMeta } from '@/types'
 
 export type MaterialType = 'JD' | 'RESUME'
 
@@ -56,4 +56,9 @@ function extractDetail(text: string): string {
   } catch {
     return ''
   }
+}
+
+/** 历史简历列表（按上传时间倒序），入场页"继续之前的简历"选项的数据源 */
+export function listResumes(): Promise<ResumeMeta[]> {
+  return getJson<ResumeMeta[]>('/materials/resumes')
 }

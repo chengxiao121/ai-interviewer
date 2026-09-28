@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { listSessions, getHistory, clearSession } from '@/api/assistant'
+import { listInterviewSessions } from '@/api/interview'
 import { useChatStore } from './chat'
 import type { HistoryMessageDto } from '@/types'
 
@@ -16,12 +17,23 @@ export const useSessionsStore = defineStore('sessions', () => {
   const loading = ref(false)
   /** 当前查看的历史 */
   const history = ref<HistoryMessageDto[]>([])
+  /** sessionId → 候选人姓名（来自入场绑定，卡片展示用；未入场的会话无记录） */
+  const candidateBySession = ref<Record<string, string>>({})
 
-  /** 拉取会话列表 */
+  /** 拉取会话列表（附带入场绑定里的候选人映射） */
   async function loadList() {
     loading.value = true
     try {
       sessions.value = await listSessions()
+      const map: Record<string, string> = {}
+      try {
+        for (const dto of await listInterviewSessions()) {
+          map[dto.sessionId] = dto.candidateId
+        }
+      } catch {
+        /* 绑定列表拉取失败不影响会话列表展示 */
+      }
+      candidateBySession.value = map
     } finally {
       loading.value = false
     }
@@ -38,7 +50,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     }
   }
 
-  /** 切换到某会话并载入历史到聊天页 */
+  /** 切换到某会话并载入历史到聊天页（同时恢复入场/候选人状态） */
   async function switchTo(sessionId: string) {
     const chat = useChatStore()
     current.value = sessionId
@@ -46,6 +58,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     try {
       const h = await getHistory(sessionId)
       chat.loadHistory(sessionId, h)
+      await chat.applyBinding(sessionId)
     } finally {
       loading.value = false
     }
@@ -54,8 +67,9 @@ export const useSessionsStore = defineStore('sessions', () => {
   /** 清空会话 */
   async function clear(sessionId: string) {
     await clearSession(sessionId)
-    // 从列表移除
+    // 从列表移除（绑定由后端级联删除）
     sessions.value = sessions.value.filter((s) => s !== sessionId)
+    delete candidateBySession.value[sessionId]
     if (current.value === sessionId) {
       current.value = ''
       history.value = []
@@ -67,6 +81,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     current,
     loading,
     history,
+    candidateBySession,
     loadList,
     loadHistory,
     switchTo,

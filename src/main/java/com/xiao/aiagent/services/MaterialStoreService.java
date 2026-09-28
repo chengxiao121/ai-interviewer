@@ -142,6 +142,34 @@ public class MaterialStoreService {
         return texts;
     }
 
+    /**
+     * 列出全部历史简历（入场页"继续之前的简历"用），按创建时间倒序。
+     * 扫描存储目录的 RESUME-*.json 元数据 sidecar；读不动的坏文件跳过不炸。
+     */
+    public List<MaterialMeta> listResumes() {
+        try (var files = Files.list(rootDir)) {
+            return files
+                    .map(p -> p.getFileName().toString())
+                    .filter(name -> name.startsWith("RESUME-") && name.endsWith(".json"))
+                    .map(this::readMeta)
+                    .filter(java.util.Objects::nonNull)
+                    .sorted(java.util.Comparator.comparing(MaterialMeta::createdAt).reversed())
+                    .toList();
+        } catch (IOException e) {
+            log.warn("列出历史简历失败（按空列表处理）：{}", e.getMessage());
+            return List.of();
+        }
+    }
+
+    private MaterialMeta readMeta(String fileName) {
+        try {
+            return objectMapper.readValue(rootDir.resolve(fileName).toFile(), MaterialMeta.class);
+        } catch (IOException e) {
+            log.warn("简历元数据读取失败，已跳过：{}（{}）", fileName, e.getMessage());
+            return null;
+        }
+    }
+
     /** 类型归一：显式指定优先；否则按文件名推断（简历/resume/cv → RESUME，其余 JD 倾向） */
     private String normalizeType(String type, String fileName) {
         if (type != null && !type.isBlank()) {

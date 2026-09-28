@@ -3,13 +3,13 @@ import { sseUrl, getJson, deleteJson } from './request'
 import type { HistoryMessageDto, ClearResult } from '@/types'
 
 /**
- * 面试对话 SSE 流式。
+ * 面试对话 SSE 流式（阶段 8：入场绑定）。
  * @param userMessage 用户输入
  * @param sessionId 会话 id
  * @param onChunk 每收到一片文本回调
  * @param onDone 流结束
  * @param onError 出错
- * @param materialIds 可选：上传资料 id 列表（带则直通资料流水线，跳过意图路由）
+ * @param entry 可选：入场信息（首轮 {candidateName, materialIds}；已入场的会话省略，由服务端绑定决定）
  * @returns AbortController，可中断
  */
 export function chatSse(
@@ -18,14 +18,15 @@ export function chatSse(
   onChunk: (text: string) => void,
   onDone?: () => void,
   onError?: (err: Error) => void,
-  materialIds?: string[],
+  entry?: { candidateName?: string; materialIds?: string[] },
 ): AbortController {
   return postSse({
     url: sseUrl('/assistant/chat'),
     body: {
       userMessage,
       sessionId,
-      ...(materialIds && materialIds.length > 0 ? { materialIds } : {}),
+      ...(entry?.candidateName ? { candidateName: entry.candidateName } : {}),
+      ...(entry?.materialIds && entry.materialIds.length > 0 ? { materialIds: entry.materialIds } : {}),
     },
     onChunk,
     onDone,
