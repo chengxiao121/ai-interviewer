@@ -21,8 +21,8 @@ watch(
   },
 )
 
-function onSend(text: string) {
-  chatStore.send(text)
+function onSend(text: string, materialIds?: string[], materialNames?: string[]) {
+  chatStore.send(text, materialIds, materialNames)
 }
 function onAbort() {
   chatStore.abort()

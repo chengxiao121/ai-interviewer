@@ -205,6 +205,80 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
         return streamAssistantAnswers(agentStream, userMessage, config);
     }
 
+    /**
+     * 带上传资料的面试入口（阶段 7 新增）——「附件确定性注入」路径。
+     *
+     * 与 chat() 的区别：资料类型与文本由上传层（MaterialStoreService）给死，
+     * 不做消息正则识别——"用户点按钮选文件"本身就是最可靠的意图信号；
+     * 复用判断与 chat() 同一套（按类型逐类查库，已分析过的类型跳过）。
+     *
+     * 记忆策略（上传相对粘贴的核心收益）：资料全文拼进【给模型看】的消息
+     * （分析官的资料守门从消息里找资料，粘贴路径同款），但写回会话记忆的
+     * 只有用户原话——资料全文不进长期记忆窗口，不挤占后续问答的上下文。
+     *
+     * @param userMessage   用户本轮原话（可为空——只传资料不打字时用默认开场句）
+     * @param materialTexts 上传资料文本（按类型归组，来自 MaterialStoreService.loadAsTexts）
+     * @param sessionId     会话 id（threadId，隔离清单/记忆/checkpoint）
+     * @param candidateId   候选人 id（写入 config metadata，供工具跨会话聚合）
+     */
+    public Flux<String> chatWithMaterials(String userMessage,
+                                          Map<Material, String> materialTexts,
+                                          String sessionId,
+                                          String candidateId) {
+        if (materialTexts == null || materialTexts.isEmpty()) {
+            throw new IllegalArgumentException("materialTexts 为空");
+        }
+        String effectiveMessage = userMessage == null || userMessage.isBlank()
+                ? "请根据我上传的资料开始面试我。"
+                : userMessage.trim();
+
+        // 待分析 = 上传类型中尚未落库的（复用红利按类型逐类生效，与 chat() 同判据）
+        Set<Material> pending = EnumSet.noneOf(Material.class);
+        for (Material m : materialTexts.keySet()) {
+            if (!codeProfileRepository.existsBySessionIdAndProfileType(sessionId, m.profileType())) {
+                pending.add(m);
+            }
+        }
+
+        // 复用路径：上传资料均已分析过 → 直连面试官（它自己会 loadCodeFacts 注入库中清单）
+        if (pending.isEmpty()) {
+            log.info("上传资料均已分析过，直连面试官：sessionId={}, types={}", sessionId, materialTexts.keySet());
+            return interviewer.chat(effectiveMessage, sessionId, candidateId);
+        }
+
+        // 流水线路径：只跑缺的那几类分析官
+        log.info("上传资料流水线启动：sessionId={}, 待分析={}", sessionId, pending);
+        SequentialAgent pipeline = pipelineFor(pending);
+
+        RunnableConfig config = RunnableConfig.builder()
+                .threadId(sessionId)
+                .addMetadata(SessionKeys.CANDIDATE_ID_KEY, candidateId)
+                .build();
+
+        // 给模型看的消息 = 用户原话 + 上传资料块（分析官守门从消息里找资料，与粘贴路径同款）
+        String analyzerMessage = buildMaterialMessage(effectiveMessage, materialTexts);
+
+        Flux<Message> agentStream;
+        try {
+            agentStream = pipeline.streamMessages(buildChatMessages(analyzerMessage, sessionId, candidateId), config);
+        } catch (GraphRunnerException e) {
+            log.error("上传资料流水线启动失败：sessionId={}", sessionId, e);
+            return Flux.error(e);
+        }
+        // 收尾写回记忆用【用户原话】——资料全文只在本轮图内可见，不进会话记忆
+        return streamAssistantAnswers(agentStream, effectiveMessage, config);
+    }
+
+    /** 拼接"用户原话 + 上传资料块"（分析官与面试官本轮共享的完整输入） */
+    private static String buildMaterialMessage(String userMessage, Map<Material, String> materialTexts) {
+        StringBuilder sb = new StringBuilder(userMessage);
+        for (Map.Entry<Material, String> entry : materialTexts.entrySet()) {
+            sb.append("\n\n【上传资料·").append(entry.getKey().profileType()).append("】\n")
+                    .append(entry.getValue());
+        }
+        return sb.toString();
+    }
+
     /** 按组合取/建编排图（bitmask 缓存，computeIfAbsent 保证同组合只 build 一次） */
     private SequentialAgent pipelineFor(Set<Material> materials) {
         return pipelineCache.computeIfAbsent(bitmask(materials), k -> build(materials));

@@ -1,7 +1,7 @@
 // 统一 fetch 封装：base 路径 /api，默认 JSON，统一错误处理。
 // 开发态经 Vite proxy 转发到后端 8080；生产态同源直连。
 
-const BASE = '/api'
+export const BASE = '/api'
 
 export class ApiError extends Error {
   status: number

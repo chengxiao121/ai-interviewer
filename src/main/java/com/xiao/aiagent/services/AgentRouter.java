@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -65,11 +66,14 @@ public class AgentRouter extends StreamingPipelineSupport {
     private final MaterialInterviewPipeline materialInterviewPipeline;
     // 判断"该会话分析过资料没"——复用快路径的开关
     private final CodeProfileRepository codeProfileRepository;
+    // 上传资料存储（阶段 7）：chatWithMaterials 按 materialIds 取文本
+    private final MaterialStoreService materialStoreService;
 
     public AgentRouter(ChatModel chatModel,
                        MaterialInterviewPipeline materialInterviewPipeline,
                        InterviewAssistant interviewer,
                        CodeProfileRepository codeProfileRepository,
+                       MaterialStoreService materialStoreService,
                        ChatMemory chatMemory,
                        MemorySaver memorySaver,
                        KnowledgeSearchService knowledgeSearchService,
@@ -98,6 +102,7 @@ public class AgentRouter extends StreamingPipelineSupport {
         this.materialInterviewPipeline = materialInterviewPipeline;
         this.interviewer = interviewer;
         this.codeProfileRepository = codeProfileRepository;
+        this.materialStoreService = materialStoreService;
 
         log.info("意图路由 Agent 构建完成：规则前置（复用快路径 + 资料规则路径）+ 2 路语义路由（material-interview / interviewer），fallback=interviewer");
     }
@@ -148,6 +153,34 @@ public class AgentRouter extends StreamingPipelineSupport {
             return Flux.error(e);
         }
         return streamAssistantAnswers(agentStream, userMessage, config);
+    }
+
+    /**
+     * 带上传资料的入口（阶段 7 新增）——第四条路，但不需要"关口"：
+     * 用户点按钮选了文件，类型与文本在上传时就已锁定，三道关口的概率判断全部跳过，
+     * 直接进资料流水线（MaterialInterviewPipeline.chatWithMaterials）。
+     *
+     * 与 chat() 的分工：chat() 管"消息里可能藏资料"的分诊；本方法管"资料已确定"的直达。
+     * Controller 按 materialIds 是否为空二选一，两者互斥覆盖全部入口。
+     *
+     * @param userMessage 用户本轮原话（可为空——只传资料不打字时流水线内部用默认开场句）
+     * @param materialIds 上传资料 id 列表（来自 /api/materials/upload 的返回）
+     * @param sessionId   会话 id
+     * @param candidateId 候选人 id
+     */
+    public Flux<String> chatWithMaterials(String userMessage,
+                                          List<String> materialIds,
+                                          String sessionId,
+                                          String candidateId) {
+        Map<MaterialInterviewPipeline.Material, String> texts;
+        try {
+            texts = materialStoreService.loadAsTexts(materialIds);
+        } catch (Exception e) {
+            log.error("读取上传资料失败：sessionId={}, materialIds={}", sessionId, materialIds, e);
+            return Flux.error(e);
+        }
+        log.info("上传资料路径启动：sessionId={}, materialIds={}, types={}", sessionId, materialIds, texts.keySet());
+        return materialInterviewPipeline.chatWithMaterials(userMessage, texts, sessionId, candidateId);
     }
 
 }
