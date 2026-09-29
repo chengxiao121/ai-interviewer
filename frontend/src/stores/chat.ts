@@ -43,6 +43,8 @@ const sessionId = ref<string>(generateSessionId())
     sessionId.value = sessionIdVal
     messages.value = history.map(normalizeMessage)
     error.value = ''
+    // 待发入场信息属于"准备新开的那场"，切走即作废，防止串到别的会话
+    pendingSetup = null
     // 有历史消息的会话一定已入场（简历必传是服务端强制的）
     entryNeeded.value = false
   }
@@ -52,6 +54,8 @@ const sessionId = ref<string>(generateSessionId())
    * 有绑定 → 恢复候选人展示、不需要入场；无绑定 → 需要重新入场。
    */
   async function applyBinding(sessionIdVal: string) {
+    // 同 loadHistory：待发入场信息不跨会话存活
+    pendingSetup = null
     const dto = await getInterviewSession(sessionIdVal)
     if (dto) {
       candidateName.value = dto.candidateId

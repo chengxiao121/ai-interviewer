@@ -15,10 +15,12 @@ const emit = defineEmits<{
 // ===== 候选人姓名 =====
 const candidateName = ref('')
 
-// ===== 简历（必选）：历史列表 或 上传新简历 =====
+// ===== 简历（必选）：上传新简历为主路径，历史简历库默认收起 =====
 const resumes = ref<ResumeMeta[]>([])
 const resumesLoading = ref(true)
 const loadError = ref('')
+/** 简历库折叠状态（默认收起：避免"每次都是上一份简历"的错觉，也防误点历史项） */
+const libraryOpen = ref(false)
 /** 选中的简历：历史 id 或 刚上传的 id */
 const selectedResume = ref<{ id: string; fileName: string } | null>(null)
 
@@ -26,6 +28,8 @@ const resumeInputRef = ref<HTMLInputElement | null>(null)
 const resumeUploading = ref(false)
 const resumeError = ref('')
 const newResume = ref<{ id: string; fileName: string } | null>(null)
+/** 去重提示：上传了与库中内容相同的简历时说明发生了什么 */
+const dedupHint = ref('')
 
 // ===== JD（可选）：仅上传 =====
 const jdInputRef = ref<HTMLInputElement | null>(null)
@@ -60,13 +64,14 @@ function pickResume(meta: ResumeMeta) {
   }
 }
 
-/** 上传新简历（成功后自动选中，并取消历史选择） */
+/** 上传新简历（成功后自动选中；与库中内容相同时提示已复用） */
 async function onResumeChosen(e: Event) {
   const input = e.target as HTMLInputElement
   const file = input.files?.[0]
   input.value = ''
   if (!file) return
   resumeError.value = ''
+  dedupHint.value = ''
   if (!isAllowedMaterialFile(file)) {
     resumeError.value = `「${file.name}」不是 txt/md 文本文件`
     return
@@ -76,7 +81,9 @@ async function onResumeChosen(e: Event) {
     const result = await uploadMaterial(file, 'RESUME')
     newResume.value = { id: result.materialId, fileName: result.fileName }
     selectedResume.value = { id: result.materialId, fileName: result.fileName }
-    // 新上传的简历不自动出现在历史列表（无元数据刷新必要），选中态已本地可见
+    if (result.duplicated) {
+      dedupHint.value = `库中已有内容相同的简历，已复用该份材料（文件名记为「${result.fileName}」）`
+    }
   } catch (err) {
     resumeError.value = err instanceof Error ? err.message : String(err)
   } finally {
@@ -136,13 +143,39 @@ function start() {
       />
     </div>
 
-    <!-- ② 简历（必选） -->
+    <!-- ② 简历（必选）：上传为主路径，简历库默认收起 -->
     <div class="field">
       <label class="field-label">简历 <span class="req">*</span></label>
 
+      <div class="upload-row">
+        <button class="upload-btn" :disabled="resumeUploading" @click="resumeInputRef?.click()">
+          {{ resumeUploading ? '上传中…' : newResume ? `✓ 已上传：${newResume.fileName}` : '＋ 上传简历（txt/md）' }}
+        </button>
+        <input ref="resumeInputRef" type="file" accept=".txt,.md,.markdown" hidden @change="onResumeChosen" />
+        <span v-if="selectedResume" class="picked-name">
+          将使用：{{ selectedResume.fileName }}
+        </span>
+      </div>
+      <p v-if="dedupHint" class="hint-line">{{ dedupHint }}</p>
+      <p v-if="resumeError" class="err">{{ resumeError }}</p>
+      <p v-if="loadError" class="err">{{ loadError }}</p>
+
       <div v-if="resumesLoading" class="loading">读取历史简历中…</div>
       <template v-else-if="resumes.length > 0">
-        <div class="resume-list">
+        <button
+          class="library-toggle"
+          type="button"
+          :title="libraryOpen ? '收起简历库' : '展开简历库'"
+          @click="libraryOpen = !libraryOpen"
+        >
+          <span class="rule-line"></span>
+          <span class="library-label">或从简历库选择（{{ resumes.length }} 份）</span>
+          <svg class="chev" :class="{ open: libraryOpen }" viewBox="0 0 12 12" width="10" height="10">
+            <path d="M 2.5 4 l 3.5 4 l 3.5 -4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span class="rule-line"></span>
+        </button>
+        <div v-show="libraryOpen" class="resume-list">
           <button
             v-for="meta in resumes"
             :key="meta.materialId"
@@ -155,21 +188,8 @@ function start() {
             <span class="meta">{{ meta.charCount }} 字 · {{ meta.createdAt.slice(0, 10) }}</span>
           </button>
         </div>
-        <p class="or">—— 或上传新简历 ——</p>
       </template>
       <p v-else class="or">还没有历史简历，上传一份开始</p>
-
-      <div class="upload-row">
-        <button class="upload-btn" :disabled="resumeUploading" @click="resumeInputRef?.click()">
-          {{ resumeUploading ? '上传中…' : newResume ? `✓ 已上传：${newResume.fileName}` : '＋ 上传简历（txt/md）' }}
-        </button>
-        <input ref="resumeInputRef" type="file" accept=".txt,.md,.markdown" hidden @change="onResumeChosen" />
-        <span v-if="selectedResume" class="picked-name">
-          将使用：{{ selectedResume.fileName }}
-        </span>
-      </div>
-      <p v-if="resumeError" class="err">{{ resumeError }}</p>
-      <p v-if="loadError" class="err">{{ loadError }}</p>
     </div>
 
     <!-- ③ JD（可选） -->
@@ -281,6 +301,51 @@ function start() {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  margin-top: 10px;
+}
+
+/* 简历库折叠开关（默认收起，上传是主路径） */
+.library-toggle {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--sans);
+}
+.library-toggle .rule-line {
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+.library-toggle .library-label {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  letter-spacing: 0.08em;
+}
+.library-toggle:hover .library-label {
+  color: var(--ink);
+}
+.library-toggle .chev {
+  color: var(--ink-soft);
+  transition: transform 0.18s ease;
+  flex-shrink: 0;
+}
+.library-toggle .chev.open {
+  transform: rotate(180deg);
+}
+
+/* 去重复用提示（信息级，非错误） */
+.hint-line {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--ink-blue);
+  letter-spacing: 0.03em;
 }
 .resume-item {
   appearance: none;

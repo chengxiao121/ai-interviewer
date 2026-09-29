@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionsStore } from '@/stores/sessions'
 import { useChatStore } from '@/stores/chat'
@@ -9,6 +9,13 @@ import type { InterviewSessionDto } from '@/types'
 const sessionsStore = useSessionsStore()
 const chatStore = useChatStore()
 const router = useRouter()
+
+/** 折叠的候选人分组（candidateId → true） */
+const collapsed = ref<Record<string, boolean>>({})
+
+function toggleGroup(candidateId: string) {
+  collapsed.value[candidateId] = !collapsed.value[candidateId]
+}
 
 onMounted(() => {
   sessionsStore.loadList()
@@ -114,6 +121,29 @@ async function clearSession(item: GroupItem) {
     chatStore.newSession()
   }
 }
+
+/**
+ * 用该候选人的身份直接开新面试：沿用最近一场绑定的简历/JD，
+ * 免去重填入场表单。绑定不在点击时落库，而是随首轮聊天消息写入（与入场表单同一路径）。
+ */
+function startNewInterview(candidateId: string) {
+  // 绑定列表按入场时间倒序，第一个命中即最近一场
+  const latest = sessionsStore.bindings.find((b) => b.candidateId === candidateId)
+  if (!latest) return
+  const resumeIds = latest.materialIds.filter((id) => id.startsWith('RESUME-'))
+  const jdIds = latest.materialIds.filter((id) => id.startsWith('JD-'))
+  if (resumeIds.length === 0) return
+  chatStore.newSession()
+  chatStore.startInterview({
+    candidateName: candidateId,
+    materialIds: [...resumeIds, ...jdIds],
+    materialNames: [
+      latest.resumeFileName ?? '简历',
+      ...(jdIds.length > 0 ? [latest.jdFileName ?? 'JD'] : []),
+    ],
+  })
+  router.push('/chat')
+}
 </script>
 
 <template>
@@ -142,32 +172,71 @@ async function clearSession(item: GroupItem) {
         </div>
         <div v-else class="candidate-groups">
           <section v-for="g in groups" :key="g.candidateId" class="cand-group">
-            <div class="group-head">
+            <div
+              class="group-head"
+              role="button"
+              tabindex="0"
+              @click="toggleGroup(g.candidateId)"
+              @keydown.enter="toggleGroup(g.candidateId)"
+              :title="collapsed[g.candidateId] ? '展开分组' : '折叠分组'"
+            >
+              <svg
+                class="chevron"
+                :class="{ open: !collapsed[g.candidateId] }"
+                viewBox="0 0 12 12" width="11" height="11"
+              >
+                <path d="M 2.5 4 l 3.5 4 l 3.5 -4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
               <span class="cand-badge">候选人</span>
               <span class="cand-name" :title="g.candidateId">{{ g.candidateId }}</span>
               <span class="group-count">{{ g.items.length }} 场</span>
+              <!-- hover 浮现：沿用该候选人最近一场的资料直接开新面试 -->
+              <span class="head-actions">
+                <button
+                  class="icon-btn"
+                  title="用该候选人开新面试（沿用最近一场的简历/JD）"
+                  @click.stop="startNewInterview(g.candidateId)"
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14"><path d="M6 8.2a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2zM1.8 13.6c0-2.3 1.9-4.1 4.2-4.1 1.2 0 2.3.5 3.1 1.3M11.5 6v5M9 8.5h5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </span>
             </div>
-            <ul class="session-cards">
+            <ul v-show="!collapsed[g.candidateId]" class="session-rows">
               <li
                 v-for="item in g.items"
                 :key="item.sessionId"
-                class="session-card"
+                class="session-row"
                 :class="{ active: sessionsStore.current === item.sessionId, pending: !item.hasRecords }"
+                :title="item.sessionId"
               >
-                <div class="card-top">
-                  <span class="session-title">第 {{ item.index }} 场 · {{ item.timeLabel }}</span>
-                  <span v-if="sessionsStore.current === item.sessionId" class="current-mark">进行中</span>
-                  <span v-else-if="!item.hasRecords" class="pending-mark">未开始</span>
+                <div class="row-line">
+                  <span class="row-title">
+                    第 {{ item.index }} 场
+                    <em v-if="sessionsStore.current === item.sessionId" class="live-mark">· 进行中</em>
+                  </span>
+                  <!-- 时间与 hover 操作图标同位切换 -->
+                  <span class="row-time">{{ item.timeLabel }}</span>
+                  <span v-if="!item.hasRecords" class="pending-mark">未开始</span>
+                  <span class="row-actions">
+                    <button
+                      class="icon-btn"
+                      :disabled="!item.hasRecords"
+                      title="查看记录"
+                      @click="viewHistory(item.sessionId)"
+                    >
+                      <svg viewBox="0 0 16 16" width="14" height="14"><path d="M1.5 8s2.4-4.2 6.5-4.2S14.5 8 14.5 8s-2.4 4.2-6.5 4.2S1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+                    </button>
+                    <button class="icon-btn" title="继续对话" @click="switchAndChat(item.sessionId)">
+                      <svg viewBox="0 0 16 16" width="14" height="14"><path d="M2.5 3.5h11v7.5h-6.5L4 13.5v-2.5H2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
+                    </button>
+                    <button class="icon-btn danger" title="删除会话" @click="clearSession(item)">
+                      <svg viewBox="0 0 16 16" width="14" height="14"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </button>
+                  </span>
                 </div>
-                <div v-if="item.resumeFileName || item.jdFileName" class="materials-line">
+                <div v-if="item.resumeFileName || item.jdFileName" class="row-sub">
                   <span v-if="item.resumeFileName" :title="item.resumeFileName">简历 {{ item.resumeFileName }}</span>
                   <span v-if="item.jdFileName" :title="item.jdFileName">JD {{ item.jdFileName }}</span>
-                </div>
-                <div class="sid" :title="item.sessionId">{{ item.sessionId }}</div>
-                <div class="ops">
-                  <button :disabled="!item.hasRecords" @click="viewHistory(item.sessionId)">查看记录</button>
-                  <button class="primary" @click="switchAndChat(item.sessionId)">继续对话</button>
-                  <button class="danger" @click="clearSession(item)">删除会话</button>
                 </div>
               </li>
             </ul>
@@ -220,30 +289,38 @@ async function clearSession(item: GroupItem) {
   padding: 18px 16px;
   background: rgba(42, 36, 29, 0.025);
 }
-.session-cards {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-/* 候选人分组 */
+/* 候选人分组（紧凑列表风格） */
 .candidate-groups {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 .cand-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 .group-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
-  padding: 0 2px;
+  padding: 4px 2px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+}
+.group-head .chevron {
+  color: var(--ink-soft);
+  transition: transform 0.18s ease;
+  flex-shrink: 0;
+}
+.group-head .chevron.open {
+  transform: rotate(0deg);
+}
+.group-head .chevron:not(.open) {
+  transform: rotate(-90deg);
 }
 .group-head .cand-badge {
   font-family: var(--mono);
@@ -254,7 +331,6 @@ async function clearSession(item: GroupItem) {
   border-radius: 3px;
   padding: 1px 5px;
   flex-shrink: 0;
-  align-self: center;
 }
 .group-head .cand-name {
   font-family: var(--serif);
@@ -272,125 +348,156 @@ async function clearSession(item: GroupItem) {
   color: var(--ink-soft);
   letter-spacing: 0.08em;
 }
-.session-cards {
+/* hover 浮现：新面试按钮（占住行尾，浮现时把"N 场"往左推） */
+.group-head .head-actions {
+  display: none;
+  align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.group-head:hover .head-actions {
+  display: flex;
+}
+
+/* 会话行：两行紧凑结构，无边框卡片，hover 浅底 */
+.session-rows {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 2px;
 }
-.session-card {
-  padding: 13px 14px;
-  border: 1px solid var(--rule);
-  border-radius: 4px;
-  background: var(--paper-raise);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+.session-row {
+  position: relative;
+  padding: 9px 14px 9px 16px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
-.session-card:hover {
-  border-color: var(--rule-strong);
-  transform: translateY(-1px);
+.session-row:hover {
+  background: rgba(42, 36, 29, 0.055);
 }
-.session-card.active {
-  border-color: var(--cinnabar);
-  box-shadow: -3px 0 0 var(--cinnabar);
+.session-row.active {
+  background: rgba(176, 58, 43, 0.06);
+  border-color: rgba(176, 58, 43, 0.35);
 }
-.session-card.pending {
-  opacity: 0.62;
+.session-row.active::before {
+  content: '';
+  position: absolute;
+  left: 6px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--cinnabar);
+}
+.session-row.pending {
   border-style: dashed;
+  border-color: var(--rule);
 }
-.card-top {
+.session-row.pending .row-title,
+.session-row.pending .row-sub {
+  opacity: 0.55;
+}
+.row-line {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
-  margin-bottom: 7px;
+  min-width: 0;
 }
-.session-title {
+.row-title {
   font-family: var(--serif);
-  font-size: 13px;
+  font-size: 13.5px;
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   color: var(--ink-strong);
+  white-space: nowrap;
 }
-.materials-line {
+.row-title .live-mark {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--cinnabar);
+}
+.row-time {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-soft);
+  flex-shrink: 0;
+}
+.session-row:hover .row-time {
+  display: none;
+}
+.session-row.pending .row-time {
+  margin-left: 0;
+}
+.pending-mark {
+  font-family: var(--serif);
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  color: var(--ink-soft);
+  border: 1px solid var(--rule-strong);
+  border-radius: 4px;
+  padding: 1px 6px;
+  flex-shrink: 0;
+}
+/* hover 操作图标：与时间同位浮现 */
+.row-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.session-row:hover .row-actions {
+  display: flex;
+}
+.session-row.pending:hover .row-actions {
+  margin-left: 8px;
+}
+.icon-btn {
+  appearance: none;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  transition: background 0.14s ease, color 0.14s ease;
+}
+.icon-btn:hover {
+  background: rgba(42, 36, 29, 0.09);
+}
+.icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.icon-btn.danger {
+  color: var(--cinnabar);
+}
+.icon-btn.danger:hover {
+  background: var(--cinnabar-wash, rgba(176, 58, 43, 0.1));
+}
+.row-sub {
   display: flex;
   gap: 12px;
-  margin-bottom: 7px;
+  margin-top: 4px;
   font-size: 11.5px;
   color: var(--ink-soft);
   letter-spacing: 0.03em;
 }
-.materials-line span {
+.row-sub span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 150px;
-}
-.card-top .current-mark {
-  font-family: var(--serif);
-  font-size: 10.5px;
-  letter-spacing: 0.2em;
-  color: var(--cinnabar);
-  border: 1.5px solid var(--cinnabar);
-  border-radius: 4px;
-  padding: 2px 6px;
-  flex-shrink: 0;
-}
-.card-top .pending-mark {
-  font-family: var(--serif);
-  font-size: 10.5px;
-  letter-spacing: 0.2em;
-  color: var(--ink-soft);
-  border: 1.5px dashed var(--rule-strong);
-  border-radius: 4px;
-  padding: 2px 6px;
-  flex-shrink: 0;
-}
-.sid {
-  font-family: var(--mono);
-  font-size: 12.5px;
-  word-break: break-all;
-  margin-bottom: 10px;
-  color: var(--ink-strong);
-  line-height: 1.55;
-}
-.ops {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.ops button {
-  appearance: none;
-  padding: 5px 11px;
-  border-radius: 4px;
-  border: 1px solid var(--rule-strong);
-  background: transparent;
-  cursor: pointer;
-  font-size: 12px;
-  color: var(--ink);
-  letter-spacing: 0.06em;
-  transition: all 0.16s ease;
-}
-.ops button:hover {
-  border-color: var(--ink);
-  background: rgba(42, 36, 29, 0.05);
-}
-.ops button.primary {
-  background: var(--ink);
-  color: var(--paper-bright);
-  border-color: var(--ink);
-}
-.ops button.primary:hover {
-  background: var(--ink-strong);
-}
-.ops button.danger {
-  color: var(--cinnabar);
-  border-color: rgba(176, 58, 43, 0.45);
-}
-.ops button.danger:hover {
-  border-color: var(--cinnabar);
-  background: var(--cinnabar-wash);
 }
 
 /* 记录面板 */
