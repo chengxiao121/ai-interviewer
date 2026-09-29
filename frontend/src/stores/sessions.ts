@@ -3,14 +3,16 @@ import { ref } from 'vue'
 import { listSessions, getHistory, clearSession } from '@/api/assistant'
 import { listInterviewSessions } from '@/api/interview'
 import { useChatStore } from './chat'
-import type { HistoryMessageDto } from '@/types'
+import type { HistoryMessageDto, InterviewSessionDto } from '@/types'
 
 /**
- * 会话管理 store：会话列表、历史、清空、切换载入。
+ * 会话管理 store：会话列表、绑定、历史、清空、切换载入。
  */
 export const useSessionsStore = defineStore('sessions', () => {
-  /** 所有会话 id */
+  /** 所有会话 id（来自 Redis 聊天记忆 = 有对话记录的会话） */
   const sessions = ref<string[]>([])
+  /** 全部入场绑定（含"绑了但没聊起来"的会话，按候选人分组展示用） */
+  const bindings = ref<InterviewSessionDto[]>([])
   /** 当前选中的会话 id（用于高亮） */
   const current = ref<string>('')
   /** 加载中 */
@@ -20,19 +22,22 @@ export const useSessionsStore = defineStore('sessions', () => {
   /** sessionId → 候选人姓名（来自入场绑定，卡片展示用；未入场的会话无记录） */
   const candidateBySession = ref<Record<string, string>>({})
 
-  /** 拉取会话列表（附带入场绑定里的候选人映射） */
+  /** 拉取会话列表（附带入场绑定列表与候选人映射） */
   async function loadList() {
     loading.value = true
     try {
       sessions.value = await listSessions()
       const map: Record<string, string> = {}
+      let list: InterviewSessionDto[] = []
       try {
-        for (const dto of await listInterviewSessions()) {
+        list = await listInterviewSessions()
+        for (const dto of list) {
           map[dto.sessionId] = dto.candidateId
         }
       } catch {
         /* 绑定列表拉取失败不影响会话列表展示 */
       }
+      bindings.value = list
       candidateBySession.value = map
     } finally {
       loading.value = false
@@ -69,6 +74,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     await clearSession(sessionId)
     // 从列表移除（绑定由后端级联删除）
     sessions.value = sessions.value.filter((s) => s !== sessionId)
+    bindings.value = bindings.value.filter((b) => b.sessionId !== sessionId)
     delete candidateBySession.value[sessionId]
     if (current.value === sessionId) {
       current.value = ''
@@ -78,6 +84,7 @@ export const useSessionsStore = defineStore('sessions', () => {
 
   return {
     sessions,
+    bindings,
     current,
     loading,
     history,

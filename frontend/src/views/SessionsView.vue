@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useSessionsStore } from '@/stores/sessions'
 import { useChatStore } from '@/stores/chat'
 import MessageBubble from '@/components/MessageBubble.vue'
+import type { InterviewSessionDto } from '@/types'
 
 const sessionsStore = useSessionsStore()
 const chatStore = useChatStore()
@@ -12,6 +13,89 @@ const router = useRouter()
 onMounted(() => {
   sessionsStore.loadList()
 })
+
+/** 分组后的单场会话条目 */
+interface GroupItem {
+  sessionId: string
+  /** 该候选人的第几场（1 起，按入场时间正序） */
+  index: number
+  timeLabel: string
+  /** Redis 记忆里有对话记录 → 正常展示；否则"未开始"灰态（绑了资料但没聊起来） */
+  hasRecords: boolean
+  resumeFileName?: string | null
+  jdFileName?: string | null
+}
+/** 候选人分组 */
+interface CandidateGroup {
+  candidateId: string
+  items: GroupItem[]
+}
+
+/** createdAt ISO 串 → "MM-dd HH:mm"（解析失败回退原串截断） */
+function timeLabel(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso.slice(0, 16)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/**
+ * 按候选人分组：
+ *   绑定表是主数据源（含"未聊起来"的会话）；Redis 记忆只用来判定 hasRecords；
+ *   有记忆但无绑定的孤儿会话（理论不应存在）归入"未关联"兜底组。
+ * 候选人按最近一场时间倒序排列；组内按入场时间正序编号（第 1 场在最上）。
+ */
+const groups = computed<CandidateGroup[]>(() => {
+  const memSet = new Set(sessionsStore.sessions)
+  const boundIds = new Set(sessionsStore.bindings.map((b) => b.sessionId))
+
+  const byCandidate = new Map<string, InterviewSessionDto[]>()
+  for (const b of sessionsStore.bindings) {
+    const list = byCandidate.get(b.candidateId) ?? []
+    list.push(b)
+    byCandidate.set(b.candidateId, list)
+  }
+
+  const result: CandidateGroup[] = []
+  for (const [candidateId, list] of byCandidate) {
+    const sorted = [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    result.push({
+      candidateId,
+      items: sorted.map((b, i) => ({
+        sessionId: b.sessionId,
+        index: i + 1,
+        timeLabel: timeLabel(b.createdAt),
+        hasRecords: memSet.has(b.sessionId),
+        resumeFileName: b.resumeFileName,
+        jdFileName: b.jdFileName,
+      })),
+    })
+  }
+  result.sort((a, b) =>
+    b.items[b.items.length - 1].timeLabel.localeCompare(a.items[a.items.length - 1].timeLabel),
+  )
+
+  const orphans = sessionsStore.sessions.filter((id) => !boundIds.has(id))
+  if (orphans.length > 0) {
+    result.push({
+      candidateId: '未关联候选人',
+      items: orphans.map((id) => ({
+        sessionId: id,
+        index: 1,
+        timeLabel: '',
+        hasRecords: true,
+      })),
+    })
+  }
+  return result
+})
+
+/** 删除确认用的会话标签 */
+function sessionLabel(item: GroupItem): string {
+  const owner = item.sessionId
+  const desc = item.index ? `第 ${item.index} 场（${item.timeLabel}）` : item.timeLabel
+  return `${desc} · ${owner.slice(0, 13)}`
+}
 
 async function viewHistory(id: string) {
   await sessionsStore.loadHistory(id)
@@ -22,11 +106,11 @@ async function switchAndChat(id: string) {
   router.push('/chat')
 }
 
-async function clearSession(id: string) {
-  if (!confirm(`确认清空会话「${id}」的记忆？此操作不可恢复。`)) return
-  await sessionsStore.clear(id)
+async function clearSession(item: GroupItem) {
+  if (!confirm(`确认删除${sessionLabel(item)}的会话记录？此操作不可恢复。`)) return
+  await sessionsStore.clear(item.sessionId)
   // 若清空的是当前聊天会话，重置聊天页
-  if (chatStore.sessionId === id) {
+  if (chatStore.sessionId === item.sessionId) {
     chatStore.newSession()
   }
 }
@@ -49,36 +133,46 @@ async function clearSession(id: string) {
 
     <div class="sessions-body">
       <section class="session-list">
-        <div v-if="sessionsStore.loading && sessionsStore.sessions.length === 0" class="loading">
+        <div v-if="sessionsStore.loading && groups.length === 0" class="loading">
           加载中…
         </div>
-        <div v-else-if="sessionsStore.sessions.length === 0" class="empty">
+        <div v-else-if="groups.length === 0" class="empty">
           <div class="empty-seal">空</div>
           暂无会话，去「面试对话」开始第一轮吧。
         </div>
-        <ul v-else class="session-cards">
-          <li
-            v-for="id in sessionsStore.sessions"
-            :key="id"
-            class="session-card"
-            :class="{ active: sessionsStore.current === id }"
-          >
-            <div class="card-top">
-              <span class="exam-no">会话</span>
-              <span v-if="sessionsStore.current === id" class="current-mark">进行中</span>
-            </div>
-            <div v-if="sessionsStore.candidateBySession[id]" class="card-candidate">
+        <div v-else class="candidate-groups">
+          <section v-for="g in groups" :key="g.candidateId" class="cand-group">
+            <div class="group-head">
               <span class="cand-badge">候选人</span>
-              <span class="cand-name">{{ sessionsStore.candidateBySession[id] }}</span>
+              <span class="cand-name" :title="g.candidateId">{{ g.candidateId }}</span>
+              <span class="group-count">{{ g.items.length }} 场</span>
             </div>
-            <div class="sid" :title="id">{{ id }}</div>
-            <div class="ops">
-              <button @click="viewHistory(id)">查看记录</button>
-              <button class="primary" @click="switchAndChat(id)">继续对话</button>
-              <button class="danger" @click="clearSession(id)">删除会话</button>
-            </div>
-          </li>
-        </ul>
+            <ul class="session-cards">
+              <li
+                v-for="item in g.items"
+                :key="item.sessionId"
+                class="session-card"
+                :class="{ active: sessionsStore.current === item.sessionId, pending: !item.hasRecords }"
+              >
+                <div class="card-top">
+                  <span class="session-title">第 {{ item.index }} 场 · {{ item.timeLabel }}</span>
+                  <span v-if="sessionsStore.current === item.sessionId" class="current-mark">进行中</span>
+                  <span v-else-if="!item.hasRecords" class="pending-mark">未开始</span>
+                </div>
+                <div v-if="item.resumeFileName || item.jdFileName" class="materials-line">
+                  <span v-if="item.resumeFileName" :title="item.resumeFileName">简历 {{ item.resumeFileName }}</span>
+                  <span v-if="item.jdFileName" :title="item.jdFileName">JD {{ item.jdFileName }}</span>
+                </div>
+                <div class="sid" :title="item.sessionId">{{ item.sessionId }}</div>
+                <div class="ops">
+                  <button :disabled="!item.hasRecords" @click="viewHistory(item.sessionId)">查看记录</button>
+                  <button class="primary" @click="switchAndChat(item.sessionId)">继续对话</button>
+                  <button class="danger" @click="clearSession(item)">删除会话</button>
+                </div>
+              </li>
+            </ul>
+          </section>
+        </div>
       </section>
 
       <section class="history-panel">
@@ -134,6 +228,58 @@ async function clearSession(id: string) {
   flex-direction: column;
   gap: 10px;
 }
+/* 候选人分组 */
+.candidate-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.cand-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.group-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 2px;
+}
+.group-head .cand-badge {
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.14em;
+  color: var(--cinnabar);
+  border: 1px solid var(--cinnabar);
+  border-radius: 3px;
+  padding: 1px 5px;
+  flex-shrink: 0;
+  align-self: center;
+}
+.group-head .cand-name {
+  font-family: var(--serif);
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--ink-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.group-head .group-count {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-soft);
+  letter-spacing: 0.08em;
+}
+.session-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .session-card {
   padding: 13px 14px;
   border: 1px solid var(--rule);
@@ -149,43 +295,37 @@ async function clearSession(id: string) {
   border-color: var(--cinnabar);
   box-shadow: -3px 0 0 var(--cinnabar);
 }
+.session-card.pending {
+  opacity: 0.62;
+  border-style: dashed;
+}
 .card-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   margin-bottom: 7px;
 }
-.exam-no {
-  font-family: var(--mono);
-  font-size: 9px;
-  letter-spacing: 0.3em;
-  color: var(--ink-soft);
-}
-.card-candidate {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  margin-bottom: 7px;
-}
-.card-candidate .cand-badge {
-  font-family: var(--mono);
-  font-size: 8.5px;
-  letter-spacing: 0.14em;
-  color: var(--cinnabar);
-  border: 1px solid var(--cinnabar);
-  border-radius: 3px;
-  padding: 1px 5px;
-  flex-shrink: 0;
-}
-.card-candidate .cand-name {
+.session-title {
   font-family: var(--serif);
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--ink);
+  letter-spacing: 0.06em;
+  color: var(--ink-strong);
+}
+.materials-line {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 7px;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  letter-spacing: 0.03em;
+}
+.materials-line span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 150px;
 }
 .card-top .current-mark {
   font-family: var(--serif);
@@ -195,6 +335,17 @@ async function clearSession(id: string) {
   border: 1.5px solid var(--cinnabar);
   border-radius: 4px;
   padding: 2px 6px;
+  flex-shrink: 0;
+}
+.card-top .pending-mark {
+  font-family: var(--serif);
+  font-size: 10.5px;
+  letter-spacing: 0.2em;
+  color: var(--ink-soft);
+  border: 1.5px dashed var(--rule-strong);
+  border-radius: 4px;
+  padding: 2px 6px;
+  flex-shrink: 0;
 }
 .sid {
   font-family: var(--mono);

@@ -15,6 +15,7 @@ import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.Optional;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
@@ -159,6 +160,19 @@ public class MaterialStoreService {
             log.warn("列出历史简历失败（按空列表处理）：{}", e.getMessage());
             return List.of();
         }
+    }
+
+    /**
+     * 按 materialId 读取单个资料元数据（会话管理页显示简历/JD 文件名用）。
+     * id 需符合类型前缀格式（防路径拼接）；文件缺失或损坏 → 空。
+     */
+    public Optional<MaterialMeta> findMeta(String materialId) {
+        if (materialId == null
+                || !(materialId.startsWith("RESUME-") || materialId.startsWith("JD-"))
+                || materialId.length() > 80) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(readMeta(materialId + ".json"));
     }
 
     private MaterialMeta readMeta(String fileName) {

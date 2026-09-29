@@ -58,4 +58,8 @@ export interface InterviewSessionDto {
   candidateId: string
   materialIds: string[]
   createdAt: string
+  /** 绑定的简历文件名（元数据读取失败时为 null，展示用） */
+  resumeFileName?: string | null
+  /** 绑定的 JD 文件名（可为 null：JD 是可选入场项） */
+  jdFileName?: string | null
 }
