@@ -121,6 +121,29 @@ async function clearSession(item: GroupItem) {
     chatStore.newSession()
   }
 }
+
+/**
+ * 用该候选人的身份直接开新面试：沿用最近一场绑定的简历/JD，
+ * 免去重填入场表单。绑定不在点击时落库，而是随首轮聊天消息写入（与入场表单同一路径）。
+ */
+function startNewInterview(candidateId: string) {
+  // 绑定列表按入场时间倒序，第一个命中即最近一场
+  const latest = sessionsStore.bindings.find((b) => b.candidateId === candidateId)
+  if (!latest) return
+  const resumeIds = latest.materialIds.filter((id) => id.startsWith('RESUME-'))
+  const jdIds = latest.materialIds.filter((id) => id.startsWith('JD-'))
+  if (resumeIds.length === 0) return
+  chatStore.newSession()
+  chatStore.startInterview({
+    candidateName: candidateId,
+    materialIds: [...resumeIds, ...jdIds],
+    materialNames: [
+      latest.resumeFileName ?? '简历',
+      ...(jdIds.length > 0 ? [latest.jdFileName ?? 'JD'] : []),
+    ],
+  })
+  router.push('/chat')
+}
 </script>
 
 <template>
@@ -149,10 +172,12 @@ async function clearSession(item: GroupItem) {
         </div>
         <div v-else class="candidate-groups">
           <section v-for="g in groups" :key="g.candidateId" class="cand-group">
-            <button
+            <div
               class="group-head"
-              type="button"
+              role="button"
+              tabindex="0"
               @click="toggleGroup(g.candidateId)"
+              @keydown.enter="toggleGroup(g.candidateId)"
               :title="collapsed[g.candidateId] ? '展开分组' : '折叠分组'"
             >
               <svg
@@ -165,7 +190,17 @@ async function clearSession(item: GroupItem) {
               <span class="cand-badge">候选人</span>
               <span class="cand-name" :title="g.candidateId">{{ g.candidateId }}</span>
               <span class="group-count">{{ g.items.length }} 场</span>
-            </button>
+              <!-- hover 浮现：沿用该候选人最近一场的资料直接开新面试 -->
+              <span class="head-actions">
+                <button
+                  class="icon-btn"
+                  title="用该候选人开新面试（沿用最近一场的简历/JD）"
+                  @click.stop="startNewInterview(g.candidateId)"
+                >
+                  <svg viewBox="0 0 16 16" width="14" height="14"><path d="M6 8.2a2.6 2.6 0 1 0 0-5.2 2.6 2.6 0 0 0 0 5.2zM1.8 13.6c0-2.3 1.9-4.1 4.2-4.1 1.2 0 2.3.5 3.1 1.3M11.5 6v5M9 8.5h5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+              </span>
+            </div>
             <ul v-show="!collapsed[g.candidateId]" class="session-rows">
               <li
                 v-for="item in g.items"
@@ -312,6 +347,16 @@ async function clearSession(item: GroupItem) {
   font-size: 10.5px;
   color: var(--ink-soft);
   letter-spacing: 0.08em;
+}
+/* hover 浮现：新面试按钮（占住行尾，浮现时把"N 场"往左推） */
+.group-head .head-actions {
+  display: none;
+  align-items: center;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.group-head:hover .head-actions {
+  display: flex;
 }
 
 /* 会话行：两行紧凑结构，无边框卡片，hover 浅底 */
