@@ -104,6 +104,16 @@ public class MaterialStoreService {
         boolean duplicated = Files.exists(textPath);
         if (duplicated) {
             log.info("上传资料命中去重（同类型同内容），复用现有 id：{}", materialId);
+            // 内容相同但文件名不同 → 元数据文件名跟随最近一次上传：
+            // 会话卡片显示的简历/JD 文件名读的是元数据，不同步会出现"传了李四.txt
+            // 卡片却显示张三.txt"的错位（createdAt 保持首次入库时间不变）
+            MaterialMeta existing = readMeta(materialId + ".json");
+            if (existing != null && !fileName.equals(existing.fileName())) {
+                writeMeta(new MaterialMeta(materialId, normalizedType, fileName, md5,
+                        content.length(), existing.createdAt()));
+                log.info("去重命中且文件名不同，元数据文件名跟随本次上传：{} → {}",
+                        existing.fileName(), fileName);
+            }
         } else {
             try {
                 Files.writeString(textPath, content, StandardCharsets.UTF_8);
