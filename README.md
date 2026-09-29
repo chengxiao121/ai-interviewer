@@ -2,20 +2,16 @@
 
 基于 **Spring AI Alibaba 1.1** 从 0 到 1 构建的多 Agent 能力评估系统：输入 JD / 简历 / 代码，多 Agent 并行画像，按《面试计划》实时自适应考核，输出**带证据链的《面试评估报告》**。
 
-> 产品立场：不是聊天陪练，是**可验证的能力评估**。报告可信在结构上要求五件事：范围契约（面试计划）、考官与评分分离、考点词表封闭、证据可溯（逐题留痕）、跨场次采样聚合。另一条全局设计判据：**LLM 调用 ≠ Agent**——只有需要工具循环/临场决策的环节才用 ReactAgent（面试官 + 3 个分析官），规划/评估/报告都是"带 LLM 的普通函数"。
-
 ## 核心功能
 
-- ** AI 模拟面试**：ReactAgent 面试官按《面试计划》逐轮出题、追问、点评，SSE 流式输出
-- ** 多资料画像**：JD 分析官 / 简历分析官 / 代码分析官并行运行（MCP 只读读取本地资料），产出结构化清单落库，作为出题依据
-- ** 智能意图路由**：三道关口——复用快路径 → 资料规则路径 → 语义路由（LLM 二分类），省 token 且不误路由
-- ** 面试计划（范围契约）**：JD 考察矩阵 → 考点计划落库，每轮注入面试官；USER 临时计划在 JD 画像落库后自动升级
-- **️ 会话内评估闭环**：答案评估器（考官/评分分离）对每轮回答结构化评分，代码侧落库留痕，评估结果当场注入影响下一题难度
-- ** 带证据链的评估报告**：计划 vs 实际覆盖矩阵由 Java 计算数字（零幻觉），LLM 只写结论，独立端点获取
-- ** 题库 RAG**：Redis Stack 向量库 + 文本 Embedding，面试官出题前检索知识库文档增强上下文
-- ** 跨会话薄弱点回顾**：候选人维度 SQL 聚合历史评分（精度高、零幻觉），开场注入或工具主动获取
-- **️ MCP 工具生态**：MCP Client 接入官方 Filesystem Server（只读过滤），支持"代码评审式面试"
-- ** 会话与知识库管理**：多会话管理、历史回看/载入/清空；知识库文档同步、分块、幂等入库
+- AI 模拟面试：ReactAgent 面试官按《面试计划》逐轮出题、追问、点评，SSE 流式输出
+- 多资料画像：JD 分析官 / 简历分析官 / 代码分析官并行运行（MCP 只读读取本地资料），产出结构化清单落库，作为出题依据
+- 智能意图路由：三道关口——复用快路径 → 资料规则路径 → 语义路由（LLM 二分类），省 token 且不误路由
+- 会话内评估闭环：答案评估器（考官/评分分离）对每轮回答结构化评分，代码侧落库留痕，评估结果当场注入影响下一题难度
+- 题库RAG：Redis Stack 向量库 + 文本 Embedding，面试官出题前检索知识库文档增强上下文
+- 跨会话薄弱点回顾：候选人维度 SQL 聚合历史评分（精度高、零幻觉），开场注入或工具主动获取
+- MCP工具生态：MCP Client 接入官方 Filesystem Server（只读过滤），支持"代码评审式面试"
+- 会话与知识库管理：多会话管理、历史回看/载入/清空；知识库文档同步、分块、幂等入库
 
 ## 系统架构
 
@@ -81,7 +77,7 @@ sequenceDiagram
     F-->>U: 计划 vs 实际覆盖矩阵 + LLM 结论 = 评估报告
 ```
 
-## 🛠️ 技术栈
+## 技术栈
 
 ### 后端
 
@@ -178,3 +174,30 @@ cd frontend && npm run build
 - 仓库内不含任何真实密钥：`application.properties` 只留 `${DASHSCOPE_API_KEY:}` 占位符，真实 Key 放在 gitignore 的 `application-local.properties` 或环境变量中
 - `data/`（外部知识库）、`test-http/`、`.verify-payloads/` 等本地调试产物均不入库
 - git 历史经过 filter-branch 清洗，不含历史遗留密钥
+
+## 效果演示
+
+<p align="center">
+  <img src="docs/images/interface-home.png" width="720" alt="模拟面试入口">
+  <br><sub><b>模拟面试入口</b>：选择面试模式、方向与难度，快速开始</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/upload-materials.png" width="720" alt="上传简历与JD">
+  <br><sub><b>面试入场</b>：候选人姓名 + 简历必传、JD 可选，资料分析后自动生成面试计划</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/interview-review.png" width="720" alt="面试点评">
+  <br><sub><b>面试对话与点评</b>：流式追问、单题评估、答后点评</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/session-cross-memory.png" width="720" alt="会话管理">
+  <br><sub><b>会话管理</b>：按候选人分组，薄弱点跨会话累积</sub>
+</p>
+
+<p align="center">
+  <img src="docs/images/knowledge-base.png" width="720" alt="知识库管理">
+  <br><sub><b>知识库管理</b>：题库文档向量化入库，出题检索的基础</sub>
+</p>
