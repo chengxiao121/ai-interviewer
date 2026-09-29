@@ -152,7 +152,7 @@ public class InterviewPlanService {
         if (topics.isEmpty()) {
             return "";
         }
-        StringBuilder sb = new StringBuilder("【面试计划】本场面试按以下考点出题，优先覆盖尚未考察过的高优先级考点，题目难度对齐考点难度档：\n");
+        StringBuilder sb = new StringBuilder("【面试计划】本场面试按以下考点出题，优先覆盖尚未考察过的高优先级考点，题目难度对齐考点难度档。计划结构是你的内部备课材料，不要在回复中罗列考点清单或阶段安排，一次只出一题：\n");
         int i = 1;
         for (PlanTopic t : topics) {
             sb.append(i++).append(". ").append(t.topic())
