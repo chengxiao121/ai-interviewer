@@ -111,13 +111,13 @@ const renderedHtml = computed(() => {
 .entry.user .content {
   background: var(--paper-raise);
   border: 1px solid var(--rule);
-  border-radius: 2px 10px 10px 10px;
+  border-radius: 4px 14px 14px 14px;
   padding: 12px 16px;
   font-family: var(--kai);
   font-size: 16px;
   line-height: 1.85;
   color: var(--ink-blue);
-  box-shadow: 2px 2px 0 rgba(42, 36, 29, 0.06);
+  box-shadow: 0 2px 8px rgba(31, 40, 35, 0.06);
 }
 
 /* 思考中 */
@@ -218,11 +218,11 @@ const renderedHtml = computed(() => {
 .markdown-body :deep(pre) {
   margin: 12px 0;
   padding: 14px 16px;
-  background: #29241d;
-  color: #ede4d3;
-  border-radius: 8px;
+  background: #26302a;
+  color: #e8efe9;
+  border-radius: 12px;
   overflow-x: auto;
-  box-shadow: inset 0 0 0 1px rgba(251, 246, 234, 0.08);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
 }
 .markdown-body :deep(pre code) {
   background: transparent;

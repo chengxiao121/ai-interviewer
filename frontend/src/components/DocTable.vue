@@ -76,7 +76,7 @@ const statusLabel: Record<string, string> = {
   transition: background 0.15s ease;
 }
 .doc-table tbody tr:hover {
-  background: rgba(42, 36, 29, 0.03);
+  background: rgba(31, 40, 35, 0.03);
 }
 .doc-table tbody tr:last-child td {
   border-bottom: none;
@@ -122,8 +122,8 @@ const statusLabel: Record<string, string> = {
   background: var(--green-wash);
 }
 .status.failed {
-  color: var(--cinnabar);
-  border: 1.5px solid var(--cinnabar);
-  background: var(--cinnabar-wash);
+  color: var(--danger);
+  border: 1.5px solid var(--danger);
+  background: var(--danger-wash);
 }
 </style>

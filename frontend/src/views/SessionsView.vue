@@ -287,7 +287,7 @@ function startNewInterview(candidateId: string) {
   border-right: 1px solid var(--rule-strong);
   overflow-y: auto;
   padding: 18px 16px;
-  background: rgba(42, 36, 29, 0.025);
+  background: rgba(31, 40, 35, 0.025);
 }
 /* 候选人分组（紧凑列表风格） */
 .candidate-groups {
@@ -377,11 +377,11 @@ function startNewInterview(candidateId: string) {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 .session-row:hover {
-  background: rgba(42, 36, 29, 0.055);
+  background: rgba(31, 40, 35, 0.05);
 }
 .session-row.active {
-  background: rgba(176, 58, 43, 0.06);
-  border-color: rgba(176, 58, 43, 0.35);
+  background: rgba(63, 157, 116, 0.08);
+  border-color: rgba(63, 157, 116, 0.4);
 }
 .session-row.active::before {
   content: '';
@@ -473,17 +473,17 @@ function startNewInterview(candidateId: string) {
   transition: background 0.14s ease, color 0.14s ease;
 }
 .icon-btn:hover {
-  background: rgba(42, 36, 29, 0.09);
+  background: rgba(31, 40, 35, 0.08);
 }
 .icon-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
 .icon-btn.danger {
-  color: var(--cinnabar);
+  color: var(--danger);
 }
 .icon-btn.danger:hover {
-  background: var(--cinnabar-wash, rgba(176, 58, 43, 0.1));
+  background: var(--danger-wash);
 }
 .row-sub {
   display: flex;

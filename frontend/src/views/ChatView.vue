@@ -184,16 +184,16 @@ const starters = [
   width: 100%;
   padding: 13px 18px;
   background: var(--paper-raise);
-  border: 1px solid var(--rule-strong);
-  border-radius: 4px;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
   cursor: pointer;
   text-align: left;
   transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 .starter:hover {
-  border-color: var(--cinnabar);
+  border-color: var(--mint);
   transform: translateX(4px);
-  box-shadow: -3px 0 0 var(--cinnabar);
+  box-shadow: 0 3px 12px rgba(63, 157, 116, 0.16);
 }
 .starter .tag {
   font-family: var(--mono);
@@ -220,13 +220,13 @@ const starters = [
   animation: rise 0.5s ease 0.32s both;
 }
 
-/* 错误批注条 */
+/* 错误提示条 */
 .error-bar {
   margin: 0 32px;
   padding: 10px 16px;
-  background: var(--cinnabar-wash);
-  border-top: 1px solid rgba(176, 58, 43, 0.35);
-  color: var(--cinnabar-deep);
+  background: var(--danger-wash);
+  border-top: 1px solid rgba(209, 106, 95, 0.35);
+  color: var(--danger-deep);
   font-size: 13px;
 }
 .error-bar .mark {

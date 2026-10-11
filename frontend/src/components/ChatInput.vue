@@ -75,15 +75,15 @@ function onKeydown(e: KeyboardEvent) {
   max-width: 720px;
   margin: 0 auto;
   background: var(--paper-raise);
-  border: 1.5px solid var(--rule-strong);
-  border-radius: 8px;
+  border: 1.5px solid var(--rule);
+  border-radius: 14px;
   padding: 12px 16px 12px;
-  box-shadow: 0 4px 16px rgba(42, 36, 29, 0.08);
+  box-shadow: 0 4px 16px rgba(31, 40, 35, 0.07);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .chat-input:focus-within {
-  border-color: var(--cinnabar);
-  box-shadow: 0 4px 20px rgba(143, 44, 32, 0.14);
+  border-color: var(--mint);
+  box-shadow: 0 4px 20px rgba(63, 157, 116, 0.18);
 }
 
 .input-head {
@@ -95,8 +95,8 @@ function onKeydown(e: KeyboardEvent) {
 .input-head .dot {
   width: 7px;
   height: 7px;
-  background: var(--cinnabar);
-  border-radius: 1px;
+  background: var(--mint);
+  border-radius: 2px;
   transform: rotate(45deg);
   flex-shrink: 0;
 }
@@ -111,7 +111,7 @@ function onKeydown(e: KeyboardEvent) {
   font-family: var(--mono);
   font-size: 9px;
   letter-spacing: 0.1em;
-  color: rgba(147, 135, 111, 0.7);
+  color: rgba(138, 148, 140, 0.75);
 }
 
 textarea {
@@ -129,7 +129,7 @@ textarea {
   color: var(--ink-strong);
 }
 textarea::placeholder {
-  color: rgba(147, 135, 111, 0.65);
+  color: rgba(138, 148, 140, 0.7);
   font-family: var(--kai);
   letter-spacing: 0.06em;
 }
@@ -149,7 +149,7 @@ textarea:disabled {
   font-family: var(--mono);
   font-size: 9.5px;
   letter-spacing: 0.1em;
-  color: rgba(147, 135, 111, 0.7);
+  color: rgba(138, 148, 140, 0.75);
 }
 .send,
 .stop {

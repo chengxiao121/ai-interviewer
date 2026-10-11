@@ -1,31 +1,45 @@
 /* ============================================================
    AI 面试官 · 模拟面试工作台（Mock Interview Studio）
-   主题：安静的面试间 —— 暖纸底 / 墨黑 / 朱砂点缀
+   主题：小小宇宙风 —— 奶油底 / 薄荷绿点缀 / 大圆角轻卡片
+   （画面风格改造版：布局不变，仅更换视觉语言）
+   ============================================================
+   说明：历史变量名（--cinnabar / --paper 等）保持不变以兼容
+   各组件引用，仅取值替换为新配色。--cinnabar 现为「薄荷绿主色」。
    ============================================================ */
 
 :root {
-  /* 纸与墨 */
-  --paper: #f5efe2;          /* 页面纸面 */
-  --paper-raise: #fdfaf1;    /* 卡片浮起 */
-  --paper-deep: #ece2cc;     /* 稿纸加深 / 表头 */
-  --paper-bright: #fbf6ea;   /* 墨底上的纸字 */
-  --ink: #2a241d;            /* 正文墨色 */
-  --ink-strong: #17120c;     /* 重墨 */
-  --ink-soft: #93876f;       /* 淡墨批注 */
-  --ink-blue: #2c3d57;       /* 钢笔蓝黑 —— 求职者手写 */
-  --cinnabar: #b03a2b;       /* 朱砂 —— 印章 / 批注 */
-  --cinnabar-deep: #8f2c20;
-  --cinnabar-wash: rgba(176, 58, 43, 0.08);
-  --green: #2e6b45;
-  --green-wash: rgba(46, 107, 69, 0.1);
-  --rule: rgba(42, 36, 29, 0.16);        /* 细栏线 */
-  --rule-strong: rgba(42, 36, 29, 0.4);  /* 粗栏线 */
+  /* 奶油底色系 */
+  --paper: #f6f7f2;          /* 页面底色：奶油白 */
+  --paper-raise: #ffffff;    /* 卡片浮起：纯白 */
+  --paper-deep: #edf2ec;     /* 表头 / 加深区：浅苔绿灰 */
+  --paper-bright: #ffffff;   /* 深底上的文字 */
+  --ink: #37413a;            /* 正文墨色：灰绿黑 */
+  --ink-strong: #1f2823;     /* 重墨：标题 */
+  --ink-soft: #8a948c;       /* 淡色辅助字 */
+  --ink-blue: #4a6b7c;       /* 用户侧蓝灰 —— 求职者气泡 */
+  --mint: #3f9d74;           /* 薄荷绿主色（原 --cinnabar 变量取值） */
+  --mint-deep: #2f7d5c;
+  --mint-wash: rgba(63, 157, 116, 0.1);
+  --danger: #d16a5f;         /* 危险 / 停止操作：珊瑚红 */
+  --danger-deep: #b8554a;
+  --danger-wash: rgba(209, 106, 95, 0.1);
+  --green: #3f9d74;
+  --green-wash: rgba(63, 157, 116, 0.12);
+  --rule: rgba(31, 40, 35, 0.1);         /* 细分隔线 */
+  --rule-strong: rgba(31, 40, 35, 0.22); /* 较明显描边 */
 
-  /* 字体 */
-  --serif: "STZhongsong", "华文中宋", "Songti SC", "Noto Serif SC", "SimSun", serif;
-  --kai: "STKaiti", "华文楷体", "KaiTi", "楷体", "Kaiti SC", var(--serif);
+  /* 字体：整体切换为现代无衬线（保留变量名兼容旧引用） */
+  --serif: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+  --kai: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
   --sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
   --mono: "JetBrains Mono", "Cascadia Code", Consolas, "Courier New", monospace;
+}
+
+/* 兼容别名：组件里的 --cinnabar* 即薄荷主色 */
+:root {
+  --cinnabar: var(--mint);
+  --cinnabar-deep: var(--mint-deep);
+  --cinnabar-wash: var(--mint-wash);
 }
 
 * {
@@ -47,33 +61,9 @@ body {
   height: 100%;
 }
 
-/* 稿纸底纹：极淡的方格纸网格 */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  background-image:
-    repeating-linear-gradient(0deg, transparent 0 27px, rgba(42, 36, 29, 0.045) 27px 28px),
-    repeating-linear-gradient(90deg, transparent 0 27px, rgba(42, 36, 29, 0.045) 27px 28px);
-}
-
-/* 纸张噪点，让纸面有纤维感 */
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  opacity: 0.5;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0.16 0 0 0 0 0.13 0 0 0 0 0.09 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
 ::selection {
-  background: var(--cinnabar);
-  color: var(--paper-bright);
+  background: var(--mint);
+  color: #fff;
 }
 
 /* 滚动条统一 */
@@ -82,13 +72,13 @@ body::after {
   height: 9px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(42, 36, 29, 0.22);
+  background: rgba(31, 40, 35, 0.18);
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: content-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(42, 36, 29, 0.4);
+  background: rgba(31, 40, 35, 0.34);
   background-clip: content-box;
   border: 2px solid transparent;
 }
@@ -97,29 +87,30 @@ body::after {
 }
 
 /* ============================================================
-   公共部件：按钮 / 页头 / 印章标签
+   公共部件：按钮 / 页头
    （全局类，供各视图 scoped 样式配合使用）
    ============================================================ */
 
-/* 鬼影按钮：描边墨字 */
+/* 幽灵按钮：浅描边圆角 */
 .btn {
   appearance: none;
   border: 1px solid var(--rule-strong);
-  background: transparent;
+  background: var(--paper-raise);
   color: var(--ink);
   font-family: var(--sans);
   font-size: 13.5px;
   line-height: 1;
   padding: 9px 16px;
-  border-radius: 5px;
+  border-radius: 10px;
   cursor: pointer;
   transition: border-color 0.18s ease, background 0.18s ease,
-    transform 0.18s ease, color 0.18s ease;
+    transform 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
 }
 .btn:hover:not(:disabled) {
-  border-color: var(--ink);
-  background: rgba(42, 36, 29, 0.05);
+  border-color: var(--mint);
+  color: var(--mint-deep);
   transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(63, 157, 116, 0.15);
 }
 .btn:active:not(:disabled) {
   transform: translateY(0);
@@ -129,39 +120,40 @@ body::after {
   cursor: not-allowed;
 }
 
-/* 重墨按钮：主操作 */
+/* 主操作按钮：薄荷绿实心 */
 .btn.ink {
-  background: var(--ink);
-  border-color: var(--ink);
-  color: var(--paper-bright);
+  background: var(--mint);
+  border-color: var(--mint);
+  color: #fff;
 }
 .btn.ink:hover:not(:disabled) {
-  background: var(--ink-strong);
-  border-color: var(--ink-strong);
+  background: var(--mint-deep);
+  border-color: var(--mint-deep);
+  color: #fff;
 }
 
-/* 朱砂按钮：停止 / 危险操作 */
+/* 危险按钮：停止 / 结束操作，珊瑚红 */
 .btn.red {
-  background: var(--cinnabar);
-  border-color: var(--cinnabar);
-  color: var(--paper-bright);
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
 }
 .btn.red:hover:not(:disabled) {
-  background: var(--cinnabar-deep);
-  border-color: var(--cinnabar-deep);
+  background: var(--danger-deep);
+  border-color: var(--danger-deep);
 }
 
-/* 朱砂鬼影：清空等次要危险操作 */
+/* 次要危险操作：清空等 */
 .btn.danger-ghost {
-  color: var(--cinnabar);
-  border-color: rgba(176, 58, 43, 0.45);
+  color: var(--danger);
+  border-color: rgba(209, 106, 95, 0.45);
 }
 .btn.danger-ghost:hover:not(:disabled) {
-  border-color: var(--cinnabar);
-  background: var(--cinnabar-wash);
+  border-color: var(--danger);
+  background: var(--danger-wash);
 }
 
-/* 页头：衬线标题 + 英文小注 + 公文双栏线 */
+/* 页头：标题 + 英文小注 */
 .page-head {
   display: flex;
   align-items: flex-end;
@@ -173,15 +165,15 @@ body::after {
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.32em;
-  color: var(--cinnabar);
+  color: var(--mint);
   margin: 0 0 6px;
 }
 .page-head .title-block h2 {
   margin: 0;
-  font-family: var(--serif);
-  font-weight: 600;
+  font-family: var(--sans);
+  font-weight: 700;
   font-size: 22px;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
   color: var(--ink-strong);
   line-height: 1.2;
 }
@@ -190,19 +182,15 @@ body::after {
   gap: 10px;
   flex-shrink: 0;
 }
-/* 公文式双栏线：粗一细二 */
+
+/* 页头分隔线：原公文双线改为柔和单线 */
 .page-rule {
   margin: 0 32px;
-  border-top: 3px solid var(--ink);
+  border-top: 1px solid var(--rule);
   position: relative;
 }
 .page-rule::after {
-  content: "";
-  position: absolute;
-  top: 2px;
-  left: 0;
-  right: 0;
-  border-top: 1px solid var(--ink);
+  content: none;
 }
 
 /* 入场动画：页面加载时的错峰浮现 */
