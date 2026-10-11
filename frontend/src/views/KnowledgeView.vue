@@ -79,9 +79,9 @@ onMounted(() => {
   color: var(--green);
 }
 .error-bar {
-  background: var(--cinnabar-wash);
-  border-left: 3px solid var(--cinnabar);
-  color: var(--cinnabar-deep);
+  background: var(--danger-wash);
+  border-left: 3px solid var(--danger);
+  color: var(--danger-deep);
 }
 .sync-result .mark,
 .error-bar .mark {
@@ -91,17 +91,17 @@ onMounted(() => {
 .paper-card {
   max-width: 960px;
   background: var(--paper-raise);
-  border: 1px solid var(--rule-strong);
-  border-radius: 6px;
+  border: 1px solid var(--rule);
+  border-radius: 14px;
   overflow: hidden;
-  box-shadow: 0 3px 14px rgba(42, 36, 29, 0.07);
+  box-shadow: 0 3px 14px rgba(31, 40, 35, 0.06);
 }
 .tip {
   max-width: 960px;
   margin-top: 18px;
   padding: 14px 18px;
   border: 1px dashed var(--rule-strong);
-  border-radius: 6px;
+  border-radius: 12px;
   color: var(--ink-soft);
   font-size: 13px;
   line-height: 1.7;

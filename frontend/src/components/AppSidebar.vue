@@ -55,24 +55,14 @@ const nav = [
   width: 232px;
   flex: 0 0 232px;
   height: 100vh;
-  background: linear-gradient(180deg, #2b251d 0%, #241f18 100%);
-  color: var(--paper-bright);
+  background: var(--paper-raise);
+  color: var(--ink);
   display: flex;
   flex-direction: column;
   padding: 24px 16px 18px;
   position: relative;
   z-index: 1;
-  border-right: 3px solid var(--ink-strong);
-}
-/* 书脊上的烫金细线 */
-.sidebar::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  right: 6px;
-  border-right: 1px solid rgba(251, 246, 234, 0.08);
-  pointer-events: none;
+  border-right: 1px solid var(--rule);
 }
 
 .brand {
@@ -81,67 +71,66 @@ const nav = [
   gap: 12px;
   padding: 0 6px 26px;
 }
-/* 品牌徽标：干净的圆角方块 */
+/* 品牌徽标：薄荷绿圆角方块 */
 .seal {
   flex: 0 0 40px;
   width: 40px;
   height: 40px;
-  background: var(--cinnabar);
-  color: #fdf4e7;
-  font-family: var(--serif);
-  font-size: 24px;
-  font-weight: 600;
+  background: var(--mint);
+  color: #fff;
+  font-family: var(--sans);
+  font-size: 22px;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 9px;
-  box-shadow: inset 0 0 0 1.5px rgba(253, 244, 231, 0.35),
-    0 2px 6px rgba(0, 0, 0, 0.25);
+  border-radius: 12px;
+  box-shadow: 0 3px 10px rgba(63, 157, 116, 0.28);
 }
 .brand-text .name {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 17px;
-  font-weight: 600;
-  letter-spacing: 0.14em;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--ink-strong);
 }
 .brand-text .caption {
   font-family: var(--mono);
   font-size: 8.5px;
   letter-spacing: 0.22em;
-  color: rgba(251, 246, 234, 0.5);
+  color: var(--ink-soft);
   margin-top: 4px;
 }
 
 .nav {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 .nav-item {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 11px 12px;
-  border-radius: 5px;
+  border-radius: 10px;
   text-decoration: none;
-  color: rgba(251, 246, 234, 0.62);
-  border-left: 2px solid transparent;
-  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
+  color: var(--ink-soft);
+  transition: background 0.18s ease, color 0.18s ease;
 }
 .nav-item:hover {
-  background: rgba(251, 246, 234, 0.06);
-  color: var(--paper-bright);
+  background: var(--paper-deep);
+  color: var(--ink-strong);
 }
 .nav-item.active {
-  background: rgba(176, 58, 43, 0.18);
-  border-left-color: var(--cinnabar);
-  color: var(--paper-bright);
+  background: var(--mint-wash);
+  color: var(--mint-deep);
+  font-weight: 600;
 }
 .no {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--cinnabar);
-  opacity: 0.9;
+  color: var(--mint);
+  opacity: 0.85;
 }
 .nav-item.active .no {
   opacity: 1;
@@ -153,25 +142,26 @@ const nav = [
 }
 .label {
   font-size: 13.5px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
 }
 .en {
   font-family: var(--mono);
   font-size: 8px;
   letter-spacing: 0.2em;
-  color: rgba(251, 246, 234, 0.34);
+  color: var(--ink-soft);
+  opacity: 0.7;
 }
 
 .session-info {
   margin-top: auto;
   padding: 16px 10px 0;
-  border-top: 1px solid rgba(251, 246, 234, 0.14);
+  border-top: 1px solid var(--rule);
 }
 .session-info .label {
   font-family: var(--mono);
   font-size: 9px;
   letter-spacing: 0.18em;
-  color: rgba(251, 246, 234, 0.45);
+  color: var(--ink-soft);
   margin-bottom: 8px;
 }
 .candidate-row {
@@ -184,18 +174,18 @@ const nav = [
   font-family: var(--mono);
   font-size: 8.5px;
   letter-spacing: 0.16em;
-  color: var(--cinnabar);
-  border: 1px solid var(--cinnabar);
-  border-radius: 3px;
+  color: var(--mint-deep);
+  border: 1px solid var(--mint);
+  border-radius: 6px;
   padding: 2px 5px;
   flex-shrink: 0;
 }
 .cand-name {
-  font-family: var(--serif);
+  font-family: var(--sans);
   font-size: 13.5px;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--paper-bright);
+  letter-spacing: 0.04em;
+  color: var(--ink-strong);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -203,32 +193,34 @@ const nav = [
 .session-id {
   font-family: var(--mono);
   font-size: 11px;
-  color: rgba(251, 246, 234, 0.8);
+  color: var(--ink-soft);
   word-break: break-all;
   max-height: 44px;
   overflow: hidden;
   line-height: 1.5;
   padding: 8px 10px;
-  border: 1px dashed rgba(251, 246, 234, 0.28);
-  border-radius: 5px;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 10px;
   margin-bottom: 12px;
 }
 .btn-new {
   width: 100%;
   padding: 10px;
-  background: var(--paper-bright);
-  color: var(--ink-strong);
+  background: var(--mint);
+  color: #fff;
   border: none;
-  border-radius: 5px;
+  border-radius: 10px;
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.12em;
-  transition: background 0.18s ease, transform 0.18s ease;
+  letter-spacing: 0.1em;
+  transition: background 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 .btn-new:hover {
-  background: #fff;
+  background: var(--mint-deep);
   transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(63, 157, 116, 0.25);
 }
 .btn-new:active {
   transform: translateY(0);

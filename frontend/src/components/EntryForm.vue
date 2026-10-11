@@ -235,7 +235,7 @@ function start() {
   align-items: center;
   justify-content: center;
   border-radius: 14px;
-  box-shadow: inset 0 0 0 2px rgba(253, 244, 231, 0.35), 0 6px 18px rgba(143, 44, 32, 0.22);
+  box-shadow: 0 6px 18px rgba(63, 157, 116, 0.25);
   animation: rise 0.5s ease both;
 }
 .entry h3 {
@@ -365,8 +365,8 @@ function start() {
   border-color: var(--ink-blue);
 }
 .resume-item.picked {
-  border-color: var(--cinnabar);
-  box-shadow: -3px 0 0 var(--cinnabar);
+  border-color: var(--mint);
+  box-shadow: 0 0 0 2px var(--mint-wash);
 }
 .resume-item .badge {
   font-family: var(--mono);
@@ -457,7 +457,7 @@ function start() {
 .err {
   margin: 6px 0 0;
   font-size: 12.5px;
-  color: var(--cinnabar-deep);
+  color: var(--danger-deep);
 }
 
 .start-btn {
@@ -468,10 +468,10 @@ function start() {
   font-size: 16px;
   font-weight: 600;
   letter-spacing: 0.24em;
-  color: #fdf4e7;
+  color: #fff;
   background: var(--cinnabar);
   border: none;
-  border-radius: 5px;
+  border-radius: 12px;
   cursor: pointer;
   transition: opacity 0.15s ease, transform 0.15s ease;
   animation: rise 0.5s ease 0.24s both;
