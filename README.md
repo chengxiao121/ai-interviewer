@@ -15,67 +15,15 @@
 
 ## 系统架构
 
-```mermaid
-flowchart TB
-    User([用户]) -->|REST / SSE| FE["Vue 3 前端<br/>聊天 / 会话 / 知识库"]
+![AI Interviewer 系统架构图](docs/images/architecture-new.png)
 
-    subgraph Backend["Spring Boot 后端（WebFlux）"]
-        AC["AssistantController<br/>SSE 流式"] --> AR["AgentRouter<br/>①复用快路径 ②资料规则路径 ③语义路由"]
-        ASMT["AssessmentController<br/>GET /report"] --> RPT["AssessmentReportService<br/>覆盖矩阵 + 证据链报告"]
-        AR -->|无资料| IA
-        AR -->|命中资料| PIPE["MaterialInterviewPipeline<br/>Parallel 并行分析官×N"]
-
-        subgraph Agents["ReactAgent 层（4 个）"]
-            PIPE --> AN["分析官×3<br/>JD / 简历 / 代码<br/>MCP 只读读资料"]
-            AN -->|结构化清单落库| CP[("code_profile")]
-            IA["面试官<br/>InterviewAssistant"]
-        end
-
-        IA -->|"ensurePlan"| PLAN["InterviewPlanService<br/>面试计划（考点词表封闭）"]
-        PLAN -->|落库| IP[("interview_plan")]
-        IA -->|"评估上一答（前置）"| EVAL["AnswerEvaluatorService<br/>结构化评分"]
-        EVAL -->|落库| SR[("score_record")]
-
-        subgraph Caps["Agent 核心能力层"]
-            MEM["短期记忆<br/>Redis 滑动窗口"]
-            TOOL["工具调用<br/>@Tool 自定义"]
-            RAG["知识检索 RAG<br/>RedisStack 向量库"]
-            MCP["MCP 工具<br/>Filesystem 只读"]
-        end
-        IA -.-> Caps
-    end
-
-    FE --> AC
-    FE --> ASMT
-    Caps --> DS[("Redis Stack<br/>记忆 + 向量")]
-    CP & IP & SR --> PG[("PostgreSQL<br/>业务数据 + 评分留痕")]
-```
+> 前端三页面 → WebFlux 后端（路由 / 画像 / 面试官 / 评估闭环 / 核心能力层）→ 百炼模型服务，数据落 PostgreSQL 与 Redis Stack
 
 ## 核心流程（一次资料面试会话）
 
-```mermaid
-sequenceDiagram
-    participant U as 用户
-    participant R as AgentRouter
-    participant P as 分析官×3（并行）
-    participant F as 面试官
-    participant E as 评估器
-    participant DB as PostgreSQL
+![AI Interviewer 核心流程时序图](docs/images/interview-flow.png)
 
-    U->>R: 首条消息（附 JD/简历/代码资料）
-    R->>P: 规则路径命中资料 → MaterialInterviewPipeline
-    P->>DB: MCP 读资料 → 结构化清单 → code_profile 落库
-    P->>F: 画像完成，进入面试
-    F->>DB: ensurePlan：生成/升级《面试计划》落库
-    loop 每一轮提问
-        F->>E: 评估上一答（考官/评分分离）
-        E->>DB: 结构化评分 → score_record 留痕
-        E-->>F: 【上一题评估】注入 → 调整下一题难度
-        F->>U: 组装上下文（薄弱点→计划→清单→RAG）→ SSE 流式出题
-    end
-    U->>F: GET /api/assessment/{sid}/report
-    F-->>U: 计划 vs 实际覆盖矩阵 + LLM 结论 = 评估报告
-```
+> 路由命中资料 → 分析官×3 并行画像落库 → 生成《面试计划》→ 每轮「评估上一答 → 调整难度 → 流式出题」闭环 → 输出《面试评估报告》
 
 ## 技术栈
 
