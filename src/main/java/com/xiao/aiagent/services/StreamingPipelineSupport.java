@@ -25,8 +25,10 @@ import java.util.concurrent.atomic.AtomicReference;
  *   组装"通用上下文" → 开跑编排图 → 过滤成助手消息 → 累加完整回答 → 收尾
  *   （写回短期窗口 + 释放 checkpoint）。
  * 前两轮 Rule of Three（ProfileAnalyzerAgent / KnowledgeSearchService）已消掉部分重复，
- * 这一轮把"组装上下文 + 过滤收尾"收进本基类，三个子类各自只保留
- * 「自己的编排 Agent + 自己的快路径/复用路径 + 自己的 streamMessages 调用与启动失败日志」。
+ * 这一轮把"组装上下文 + 过滤收尾"收进本基类；P2-7 收口后 InterviewAssistant（直连快路径）
+ * 也加入继承——四条入口路径共用同一份装配与收尾，子类各自只保留
+ * 「自己的编排 Agent + 自己的快路径/复用路径 + 自己的 streamMessages 调用与启动失败日志」，
+ * 自有差异项（如直连路径的代码事实清单前置注入）经 extraContext 钩子保留。
  *
  * 基类提供：
  *   1. buildChatMessages(userMessage, sessionId)：组装"通用上下文"
@@ -96,6 +98,15 @@ public abstract class StreamingPipelineSupport {
             messages.add(new SystemMessage(planContext));
         }
 
+        // ①c 扩展点钩子（P2-7 收口第二步新增）：子类有基类未覆盖的上下文时覆写 extraContext。
+        //    默认空串 = 不注入，三条编排路径（路由/资料/综合）行为不变；
+        //    InterviewAssistant（直连快路径）用它在原位置前置注入代码事实清单——
+        //    若直接裸复用而不留钩子，直连路径会丢掉"清单保证注入"，退化成指望模型自觉调工具。
+        String extraContext = extraContext(userMessage, sessionId);
+        if (!extraContext.isBlank()) {
+            messages.add(new SystemMessage(extraContext));
+        }
+
         // ② 题库知识
         String knowledgeContext = knowledgeSearchService.search(userMessage);
         if (!knowledgeContext.isBlank()) {
@@ -118,6 +129,15 @@ public abstract class StreamingPipelineSupport {
         messages.addAll(chatMemory.get(sessionId));
         messages.add(new UserMessage(userMessage));
         return messages;
+    }
+
+    /**
+     * 上下文装配扩展点（P2-7 收口新增）：子类需要注入基类未覆盖的上下文时覆写，默认空串不注入。
+     * 钩子位置：薄弱点回顾/面试计划之后、题库 RAG 之前——与收口前 InterviewAssistant.chat()
+     * 手写装配的注入顺序一致（薄弱点 → 计划 → 代码清单 → RAG → 评估），收口不改顺序。
+     */
+    protected String extraContext(String userMessage, String sessionId) {
+        return "";
     }
 
     /**

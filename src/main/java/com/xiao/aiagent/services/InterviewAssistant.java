@@ -6,21 +6,17 @@ import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
 import com.xiao.aiagent.entity.CodeProfile;
-import com.xiao.aiagent.entity.InterviewPlan;
 import com.xiao.aiagent.repository.CodeProfileRepository;
 import com.xiao.aiagent.tools.InterviewTools;
 import com.xiao.aiagent.tools.SessionKeys;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;
-import org.springframework.ai.chat.messages.SystemMessage;
-import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -111,8 +107,6 @@ public class InterviewAssistant extends StreamingPipelineSupport {
     // 面试官从这里按 sessionId 取清单出题。这就是 Agent 间"落库传递数据契约"的读取端
     // （chatMemory/memorySaver/RAG/薄弱点/计划/评估等公共依赖由基类 StreamingPipelineSupport 持有）
     private final CodeProfileRepository codeProfileRepository;
-    // 答案评估（阶段 5.3 新增）：会话内评估闭环——每轮评分落库 + 产【上一题评估】注入文本
-    private final AnswerEvaluatorService answerEvaluatorService;
 
     public InterviewAssistant(ChatModel chatModel,
                               InterviewTools interviewTools,
@@ -159,7 +153,6 @@ public class InterviewAssistant extends StreamingPipelineSupport {
 
         this.agent = builder.build();
         this.codeProfileRepository = codeProfileRepository;
-        this.answerEvaluatorService = answerEvaluatorService;
     }
 
     /**
@@ -177,8 +170,7 @@ public class InterviewAssistant extends StreamingPipelineSupport {
     /**
      * 发送一次面试对话请求（SSE 流式）。
      *
-     * 流程：跨会话薄弱点注入 + 题库 RAG 前置检索 + Redis 窗口历史组装消息 → ReactAgent 流式推理
-     * → 完成后写回短期窗口并释放本次运行的 checkpoint。
+     * 流程：上下文装配（复用基类 buildChatMessages）→ ReactAgent 流式推理 → 流式收尾（复用基类）。
      *
      * sessionId 由前端（或 API 调用方）传入，后端不生成。它被用于两处：
      *  1. threadId → ReAct checkpoint 的会话隔离键；
@@ -189,54 +181,12 @@ public class InterviewAssistant extends StreamingPipelineSupport {
      */
     public Flux<String> chat(String userMessage, String sessionId, String candidateId) {
 
-        // ── 第 0 步（阶段 5.3）：会话内评估闭环——先评估上一答，再组装本题上下文 ──
-        // 评估必须在出题【之前】：它的结论（得分/薄弱/下题建议）要影响本题的难度与方向。
-        // 评分落库由评估服务代码直接执行（不再经面试官调 scoreRecord 工具，结构性修掉风险 23）。
-        InterviewPlan plan = interviewPlanService.ensurePlan(userMessage, sessionId, candidateId);
-        AnswerEvaluatorService.EvaluationOutcome evaluation =
-                answerEvaluatorService.evaluateTurn(userMessage, sessionId, candidateId, plan);
-
-        // ── 第 1 步：给"这场面试"准备好开场记录本（图状态 messages 的初始内容）──
-        // 这里在模拟以前记忆顾问 + RAG 顾问自动做的事，只是现在由我们显式组装。
-        // 阶段 4.1 新增：还可能注入【代码事实清单】——由上游 CodeAnalyzerAgent 产出、
-        // 落库在 code_profile 表，面试官据此出题（这是双 Agent 数据契约的消费端）；
-        // 阶段 4.3 新增：【跨会话薄弱点回顾】——候选人有历史评分时注入，反馈闭环的消费端；
-        // 阶段 5.2 新增：【面试计划】——"考什么"的范围契约；5.3 新增：【上一题评估】——当轮反馈。
-        //   ① 跨会话薄弱点回顾（WeaknessProfileService，4.3）→ system 消息（无历史则跳过）；
-        //   ② 面试计划（InterviewPlanService，5.2）→ system 消息（无计划/生成失败跳过）；
-        //   ③ 代码事实清单（loadCodeFacts 取自 code_profile 表）→ system 消息；
-        //   ④ 题库知识（knowledgeSearchService 检索结果）→ system 消息；
-        //   ⑤ 上一题评估（AnswerEvaluatorService，5.3）→ system 消息（非作答/评估失败跳过）；
-        //   ⑥ 短期窗口历史（chatMemory.get）→ 最近 60 条对话抄进来；
-        //   ⑦ 最后放上面试者这句新提问。
-        List<Message> messages = new ArrayList<>();
-
-        String weaknessContext = weaknessProfileService.loadProfile(candidateId);
-        if (!weaknessContext.isBlank()) {
-            messages.add(new SystemMessage(weaknessContext));
-        }
-
-        String planContext = interviewPlanService.renderPlan(plan);
-        if (!planContext.isBlank()) {
-            messages.add(new SystemMessage(planContext));
-        }
-
-        String codeFactsContext = loadCodeFacts(sessionId);
-        if (!codeFactsContext.isBlank()) {
-            messages.add(new SystemMessage(codeFactsContext));
-        }
-
-        String knowledgeContext = knowledgeSearchService.search(userMessage);
-        if (!knowledgeContext.isBlank()) {
-            messages.add(new SystemMessage(knowledgeContext));
-        }
-
-        if (!evaluation.injectionText().isBlank()) {
-            messages.add(new SystemMessage(evaluation.injectionText()));
-        }
-
-        messages.addAll(chatMemory.get(sessionId));          // Redis 滑动窗口历史
-        messages.add(new UserMessage(userMessage));
+        // ── 第 1 步：组装上下文（P2-7 收口第二步：复用基类公共装配）──
+        // 基类装配 = 薄弱点回顾 → 面试计划(含 ensurePlan) → 【本类钩子：代码事实清单】→ 题库 RAG
+        //            → 上一题评估(含 evaluateTurn) → 窗口历史 → 本轮消息；
+        // ensurePlan/evaluateTurn 都在基类装配里执行，评估必须在出题之前的时序由装配顺序保证。
+        // 直连快路径独有的 codeFacts 前置注入经 extraContext 钩子保留（见下方覆写）。
+        List<Message> messages = buildChatMessages(userMessage, sessionId, candidateId);
 
         // ── 第 2 步：指定"这是哪场面试 / 哪个候选人"并开跑循环 ──
         // threadId = sessionId：既用来隔离每本书(会话)，也是工具里取 sessionId 的来源。
@@ -261,6 +211,21 @@ public class InterviewAssistant extends StreamingPipelineSupport {
         // 过滤成助手正文 → 边流边累加完整回答 → 正常跑完后写回短期窗口 + 释放 checkpoint，
         // 全部在基类 streamAssistantAnswers 里；出错/取消不写回（避免半截回答进短期记忆）。
         return streamAssistantAnswers(agentStream, userMessage, config);
+    }
+
+    /**
+     * 直连快路径的差异项：代码事实清单前置注入（经基类 extraContext 钩子保留）。
+     *
+     * 为什么必须是钩子而不是裸复用基类装配：清单在库时"保证注入进 system 消息"是
+     * 重开代码评审会话的既定行为（阶段 4.1）；若裸复用丢失此项，注入就退化成
+     * "指望模型自觉调 getCodeFacts 工具"——与风险 23 同款的概率性缺失。
+     *
+     * 与流水线路径的关系：AgentRouter / MaterialInterviewPipeline 不覆写（默认空串），
+     * 行为不变；它们路径里面的试官子图靠 getCodeFacts 工具按需取清单（SYSTEM_PROMPT 第 7 条）。
+     */
+    @Override
+    protected String extraContext(String userMessage, String sessionId) {
+        return loadCodeFacts(sessionId);
     }
 
     /**
