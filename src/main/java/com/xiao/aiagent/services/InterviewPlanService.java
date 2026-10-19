@@ -13,6 +13,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -128,11 +129,21 @@ public class InterviewPlanService {
         if (created == null) {
             return null;
         }
-        InterviewPlan saved = interviewPlanRepository.save(created);
-        log.info("面试计划落库：id={}, sessionId={}, source={}, 考点={}",
-                saved.getId(), sessionId, saved.getSource(),
-                parseTopics(saved.getTopicsJson()).stream().map(PlanTopic::topic).toList());
-        return saved;
+        try {
+            InterviewPlan saved = interviewPlanRepository.save(created);
+            log.info("面试计划落库：id={}, sessionId={}, source={}, 考点={}",
+                    saved.getId(), sessionId, saved.getSource(),
+                    parseTopics(saved.getTopicsJson()).stream().map(PlanTopic::topic).toList());
+            return saved;
+        } catch (DataIntegrityViolationException e) {
+            // 并发兜底：双开标签页同时首轮进入，两边都查到"无计划"→ 各调一次 LLM 生成；
+            // 唯一约束 uk_plan_session 拦下后落库的一方，读回先落库的那份返回（谁先谁赢，出题口径统一）
+            InterviewPlan winner = interviewPlanRepository.findBySessionId(sessionId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "撞唯一约束但查不到已有计划，疑似约束定义与查询条件不一致：sessionId=" + sessionId, e));
+            log.info("并发生成计划撞唯一约束，读回已有计划：id={}, sessionId={}", winner.getId(), sessionId);
+            return winner;
+        }
     }
 
     /** 读取某场面试的计划（评估官/报告用；无计划返回 empty，消费方自行降级） */

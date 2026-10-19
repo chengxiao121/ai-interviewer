@@ -14,6 +14,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -203,27 +204,54 @@ public class AnswerEvaluatorService {
         return truncateHead(t.startsWith(OUT_OF_PLAN_PREFIX) ? t : OUT_OF_PLAN_PREFIX + "：" + t, MAX_TOPIC_COL_LEN);
     }
 
-    /** 落库（幂等：同会话同题更新不新增，沿用 4.3 的 findBySessionIdAndQuestion 去重约定） */
+    /**
+     * 落库（幂等：同会话同题更新不新增，沿用 4.3 的 findBySessionIdAndQuestion 去重约定）。
+     *
+     * 并发安全（两级防线）：
+     *   第一级：先查后写，覆盖绝大多数重复场景（模型重复评分、请求重放）；
+     *   第二级：唯一约束 uk_score_session_question 兜底——"查→判→写"三步之间有时间间隙，
+     *   并发请求可能都查到"不存在"然后各自插入，此时后插入的一方撞约束抛
+     *   DataIntegrityViolationException，捕获后转为更新先落库的那条记录。
+     *
+     * 为什么不加 @Transactional：本方法是私有方法、由同类内部调用，Spring 事务基于代理，
+     * 自调用不会被拦截（加了也白加）；而把事务上提 到 evaluateTurn 又会把 LLM 调用圈进
+     * 数据库事务里长时间占用连接。这里每一步都是单行读写、各自原子，靠唯一约束保证最终
+     * 只有一条记录即可——这正是"用约束兜底幂等，而不是用事务包住判断"的取舍。
+     */
     private void persist(String sessionId, String candidateId, String topic, String question,
                          String userMessage, Evaluation eval) {
         double score = Math.max(0, Math.min(10, eval.score()));
         String feedback = buildFeedback(eval);
         Optional<ScoreRecord> existing = scoreRecordRepository.findBySessionIdAndQuestion(sessionId, question);
         if (existing.isPresent()) {
-            ScoreRecord record = existing.get();
-            record.setCandidateId(candidateId);
-            record.setTopic(topic);
-            record.setAnswer(truncateHead(userMessage, MAX_ANSWER_COL_LEN));
-            record.setScore(score);
-            record.setFeedback(feedback);
-            record.setCreatedAt(LocalDateTime.now());
-            scoreRecordRepository.save(record);
-            log.info("同题重复评分，已更新原记录：id={}, topic={}, score={}", record.getId(), topic, score);
+            applyScoreUpdate(existing.get(), candidateId, topic, userMessage, score, feedback);
+            log.info("同题重复评分，已更新原记录：id={}, topic={}, score={}", existing.get().getId(), topic, score);
             return;
         }
-        scoreRecordRepository.save(new ScoreRecord(
-                sessionId, candidateId, topic, question,
-                truncateHead(userMessage, MAX_ANSWER_COL_LEN), score, feedback, LocalDateTime.now()));
+        try {
+            scoreRecordRepository.save(new ScoreRecord(
+                    sessionId, candidateId, topic, question,
+                    truncateHead(userMessage, MAX_ANSWER_COL_LEN), score, feedback, LocalDateTime.now()));
+        } catch (DataIntegrityViolationException e) {
+            // 并发兜底：写入瞬间撞唯一约束 → 同题记录已被并发请求先落库，读回并更新（谁先落库谁保留，后到者覆盖评分）
+            ScoreRecord record = scoreRecordRepository.findBySessionIdAndQuestion(sessionId, question)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "撞唯一约束但查不到同题记录，疑似约束定义与查询条件不一致：sessionId=" + sessionId, e));
+            applyScoreUpdate(record, candidateId, topic, userMessage, score, feedback);
+            log.info("并发同题双写被唯一约束拦下，已转更新原记录：id={}, topic={}, score={}", record.getId(), topic, score);
+        }
+    }
+
+    /** 把一次评分结果覆盖到已有记录上（正常更新与并发兜底转更新共用同一套字段赋值） */
+    private void applyScoreUpdate(ScoreRecord record, String candidateId, String topic,
+                                  String userMessage, double score, String feedback) {
+        record.setCandidateId(candidateId);
+        record.setTopic(topic);
+        record.setAnswer(truncateHead(userMessage, MAX_ANSWER_COL_LEN));
+        record.setScore(score);
+        record.setFeedback(feedback);
+        record.setCreatedAt(LocalDateTime.now());
+        scoreRecordRepository.save(record);
     }
 
     /** 点评合并为 feedback 单列（score_record 只有一列点评：亮点+薄弱+建议拼接） */

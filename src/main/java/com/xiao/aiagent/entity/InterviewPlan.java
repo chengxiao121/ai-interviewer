@@ -25,9 +25,13 @@ import java.time.LocalDateTime;
  *   唯一的例外是升级：source=USER 的临时计划在 JD 画像落库后被重生成（见 InterviewPlanService）。
  */
 @Entity
-@Table(name = "interview_plan")
 @Data
 @NoArgsConstructor
+// 唯一约束 uk_plan_session：一场会话一份计划（与类注释"一场一份"契约对齐）。
+// 作用：ensurePlan 的"查无→生成→落库"在并发首轮（用户双开标签页）下会各生成一份，
+// 由数据库兜底保证物理上只存得下一份，后落库的一方撞约束后读回先落库的那份。
+@Table(name = "interview_plan",
+        uniqueConstraints = @UniqueConstraint(name = "uk_plan_session", columnNames = "session_id"))
 public class InterviewPlan {
 
     @Id
