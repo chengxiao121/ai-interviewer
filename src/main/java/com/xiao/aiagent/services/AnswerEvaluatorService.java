@@ -183,8 +183,9 @@ public class AnswerEvaluatorService {
     /**
      * 考点三级校验（封闭词表，报告覆盖矩阵可 join 的前提）：
      * 精确匹配 → 包含匹配归一到词表措辞 → 兜底"计划外：<原文>"。词表为空（无计划）时自由归类。
+     * 包私有 static：不用实例状态，收窄可见性同时可被同包单测直接调用（避免反射测试）。
      */
-    private String resolveTopic(String topic, List<InterviewPlanService.PlanTopic> vocabulary) {
+    static String resolveTopic(String topic, List<InterviewPlanService.PlanTopic> vocabulary) {
         String t = topic.trim();
         if (vocabulary.isEmpty()) {
             return truncateHead(t, MAX_TOPIC_COL_LEN);
