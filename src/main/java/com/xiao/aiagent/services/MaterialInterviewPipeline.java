@@ -11,6 +11,7 @@ import com.xiao.aiagent.repository.CodeProfileRepository;
 import com.xiao.aiagent.tools.SessionKeys;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -108,10 +109,12 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
                                      KnowledgeSearchService knowledgeSearchService,
                                      WeaknessProfileService weaknessProfileService,
                                      InterviewPlanService interviewPlanService,
-                                     AnswerEvaluatorService answerEvaluatorService) {
+                                     AnswerEvaluatorService answerEvaluatorService,
+                                     @Value("${app.interview.output-guard.mode:log}") String outputGuardMode) {
 
         super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService,
-                interviewPlanService, answerEvaluatorService);
+                interviewPlanService, answerEvaluatorService,
+                OutputGuard.Mode.valueOf(outputGuardMode.trim().toUpperCase()));
 
         this.codeAnalyzer = codeAnalyzer;
         this.jdAnalyzer = jdAnalyzer;

@@ -58,19 +58,23 @@ public abstract class StreamingPipelineSupport {
     protected final InterviewPlanService interviewPlanService;
     /** 答案评估（阶段 5.3 新增）：会话内评估闭环，buildChatMessages 每轮先评估再注入 */
     protected final AnswerEvaluatorService answerEvaluatorService;
+    /** 输出守卫模式（阶段 4 新增）：子类经 @Value 读配置后透传，streamAssistantAnswers 出口兜底用 */
+    protected final OutputGuard.Mode outputGuardMode;
 
     protected StreamingPipelineSupport(ChatMemory chatMemory,
                                        MemorySaver memorySaver,
                                        KnowledgeSearchService knowledgeSearchService,
                                        WeaknessProfileService weaknessProfileService,
                                        InterviewPlanService interviewPlanService,
-                                       AnswerEvaluatorService answerEvaluatorService) {
+                                       AnswerEvaluatorService answerEvaluatorService,
+                                       OutputGuard.Mode outputGuardMode) {
         this.chatMemory = chatMemory;
         this.memorySaver = memorySaver;
         this.knowledgeSearchService = knowledgeSearchService;
         this.weaknessProfileService = weaknessProfileService;
         this.interviewPlanService = interviewPlanService;
         this.answerEvaluatorService = answerEvaluatorService;
+        this.outputGuardMode = outputGuardMode;
     }
 
     /**
@@ -164,10 +168,23 @@ public abstract class StreamingPipelineSupport {
 
         AtomicReference<String> fullAnswer = new AtomicReference<>("");
 
+        // ── 输出守卫（阶段 4）：只作用于"转发给前端"这一环 ──
+        // rawAnswer 的完整累加（doOnNext 那行）在守卫之前、与转发解耦——无论 log/truncate，
+        // 短期记忆写回的都是完整原文，被截断的半截回答绝不进记忆（红线）。
+        // log 模式：feed 只计数不干预流；truncate 模式：命中后返回 null 停止转发；
+        // off 模式：guard 对象仍 new 出来但 feed 直通（避免分支判断，统一走同一管道）。
+        OutputGuard guard = new OutputGuard(outputGuardMode);
+
         return answer
                 .doOnNext(chunk -> fullAnswer.set(fullAnswer.get() + chunk))
+                .map(chunk -> guard.feed(chunk))
+                .filter(t -> t != null && !t.isEmpty())
                 .doFinally(signal -> {
                     if (signal == SignalType.ON_COMPLETE) {
+                        if (guard.hitCount() > 0) {
+                            log.warn("输出守卫命中敏感结构 {} 次：sessionId={}, mode={}",
+                                    guard.hitCount(), sessionId, outputGuardMode);
+                        }
                         chatMemory.add(sessionId, List.of(
                                 new UserMessage(userMessage),
                                 new AssistantMessage(fullAnswer.get())));

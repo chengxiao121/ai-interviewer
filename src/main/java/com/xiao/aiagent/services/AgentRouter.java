@@ -9,6 +9,7 @@ import com.xiao.aiagent.tools.SessionKeys;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -79,10 +80,12 @@ public class AgentRouter extends StreamingPipelineSupport {
                        KnowledgeSearchService knowledgeSearchService,
                        WeaknessProfileService weaknessProfileService,
                        InterviewPlanService interviewPlanService,
-                       AnswerEvaluatorService answerEvaluatorService) {
+                       AnswerEvaluatorService answerEvaluatorService,
+                       @Value("${app.interview.output-guard.mode:log}") String outputGuardMode) {
 
         super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService,
-                interviewPlanService, answerEvaluatorService);
+                interviewPlanService, answerEvaluatorService,
+                OutputGuard.Mode.valueOf(outputGuardMode.trim().toUpperCase()));
 
         // ── 组装"分诊台"（只剩两个科室）──
         // material-interview 注册的是全量组合（三个分析官都在）：路由 LLM 只判断"是不是资料面试"，

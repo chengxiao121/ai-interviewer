@@ -14,6 +14,7 @@ import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.tool.ToolCallbackProvider;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -141,11 +142,13 @@ public class InterviewAssistant extends StreamingPipelineSupport {
                               CodeProfileRepository codeProfileRepository,
                               WeaknessProfileService weaknessProfileService,
                               InterviewPlanService interviewPlanService,
-                              AnswerEvaluatorService answerEvaluatorService) {
+                              AnswerEvaluatorService answerEvaluatorService,
+                              @Value("${app.interview.output-guard.mode:log}") String outputGuardMode) {
 
-        // 公共依赖（记忆/存档器/RAG/薄弱点/计划/评估）交给基类持有（P2-7 收口第一步）
+        // 公共依赖（记忆/存档器/RAG/薄弱点/计划/评估/守卫模式）交给基类持有（P2-7 收口第一步）
         super(chatMemory, memorySaver, knowledgeSearchService,
-                weaknessProfileService, interviewPlanService, answerEvaluatorService);
+                weaknessProfileService, interviewPlanService, answerEvaluatorService,
+                OutputGuard.Mode.valueOf(outputGuardMode.trim().toUpperCase()));
 
         // MCP 工具通过 ObjectProvider 注入（而非直接 @Autowired）：
         // 原因是降级兼容——当未配置 MCP server 或 npx 拉包失败时，自动装配不会产出
