@@ -143,25 +143,30 @@ cd frontend && npm run build
 
 <p align="center">
   <img src="docs/images/interface-home.png" width="720" alt="模拟面试入口">
+  <br/>
   <sub><b>模拟面试入口</b>：选择面试模式、方向与难度，快速开始</sub>
 </p>
 
 <p align="center">
   <img src="docs/images/upload-materials.png" width="720" alt="上传简历与JD">
+  <br/>
   <sub><b>面试入场</b>：候选人姓名 + 简历必传、JD 可选，资料分析后自动生成面试计划</sub>
 </p>
 
 <p align="center">
   <img src="docs/images/interview-review.png" width="720" alt="面试点评">
+  <br/>
   <sub><b>面试对话与点评</b>：流式追问、单题评估、答后点评</sub>
 </p>
 
 <p align="center">
   <img src="docs/images/session-cross-memory.png" width="720" alt="会话管理">
+  <br/>
   <sub><b>会话管理</b>：按候选人分组，薄弱点跨会话累积</sub>
 </p>
 
 <p align="center">
   <img src="docs/images/knowledge-base.png" width="720" alt="知识库管理">
+  <br/>
   <sub><b>知识库管理</b>：题库文档向量化入库，出题检索的基础</sub>
 </p>
