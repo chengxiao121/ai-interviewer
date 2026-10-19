@@ -1,6 +1,8 @@
 package com.xiao.aiagent.controller;
 
 import com.xiao.aiagent.repository.InterviewSessionRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
@@ -16,6 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/assistant/memory")
 public class MemoryController {
+
+    private static final Logger log = LoggerFactory.getLogger(MemoryController.class);
 
     // 记忆策略层：查历史、清空会话
     private final ChatMemory chatMemory;
@@ -43,13 +47,26 @@ public class MemoryController {
                 .toList();
     }
 
-    // 清空会话记忆：删除 Redis 中该会话的 key，之后同 sessionId 再聊是全新会话；
-    // 级联删除入场绑定（阶段 8）——会话没了，"谁在面、用什么资料"的绑定也不该留着
+    // 清空会话：跨两个存储（Redis 记忆 + PG 入场绑定），无跨存储事务，失败补偿不划算——
+    // 策略是"失败可见"：任一步失败记 error 日志并如实反映在返回值里，不再恒报成功。
+    // 注意半成品状态的可能性：记忆清了但绑定删失败 → 残留孤儿绑定（下次入场同 sessionId 会覆盖，影响有限）。
     @DeleteMapping("/{sessionId}")
     public ClearResult clear(@PathVariable String sessionId) {
-        chatMemory.clear(sessionId);
-        interviewSessionRepository.deleteBySessionId(sessionId);
-        return new ClearResult(sessionId, true);
+        boolean memoryCleared = true;
+        boolean bindingCleared = true;
+        try {
+            chatMemory.clear(sessionId);
+        } catch (Exception e) {
+            memoryCleared = false;
+            log.error("清空会话记忆失败：sessionId={}", sessionId, e);
+        }
+        try {
+            interviewSessionRepository.deleteBySessionId(sessionId);
+        } catch (Exception e) {
+            bindingCleared = false;
+            log.error("删除入场绑定失败（级联删除未完成，绑定残留）：sessionId={}", sessionId, e);
+        }
+        return new ClearResult(sessionId, memoryCleared && bindingCleared, memoryCleared, bindingCleared);
     }
 
     // 列出所有会话 id（能力在存储层，ChatMemory 接口没有此方法）
@@ -62,7 +79,7 @@ public class MemoryController {
     public record ChatMessageDto(String role, String content) {
     }
 
-    // 清空会话结果
-    public record ClearResult(String sessionId, boolean cleared) {
+    // 清空会话结果：cleared = 两步全部成功；memoryCleared / bindingCleared 分别暴露每步结果
+    public record ClearResult(String sessionId, boolean cleared, boolean memoryCleared, boolean bindingCleared) {
     }
 }

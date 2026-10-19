@@ -12,10 +12,12 @@ export interface HistoryMessageDto {
   content: string
 }
 
-/** 后端清空会话结果 */
+/** 后端清空会话结果：cleared = 两步全部成功（Redis 记忆 + PG 入场绑定各自独立汇报） */
 export interface ClearResult {
   sessionId: string
   cleared: boolean
+  memoryCleared: boolean
+  bindingCleared: boolean
 }
 
 /** 后端知识库同步结果 */

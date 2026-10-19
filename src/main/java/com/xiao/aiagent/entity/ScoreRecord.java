@@ -11,9 +11,14 @@ import java.time.LocalDateTime;
  * 供 questionStats 工具做薄弱考点聚合统计。
  */
 @Entity
-@Table(name = "score_record")
 @Data
 @NoArgsConstructor
+// 唯一约束 uk_score_session_question：(session_id, question) 一场会话一道题一条评分。
+// 作用：persist 的"查→判→写"三步在并发下会被插队（B 查的时候 A 还没写完），
+// 应用层判断防不住双写，由数据库在最后一步兜底拦下——插入撞约束即说明已有同题记录。
+@Table(name = "score_record",
+        uniqueConstraints = @UniqueConstraint(name = "uk_score_session_question",
+                columnNames = {"session_id", "question"}))
 public class ScoreRecord {
 
     @Id
