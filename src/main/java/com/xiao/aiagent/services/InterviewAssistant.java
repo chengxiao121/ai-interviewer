@@ -265,6 +265,8 @@ public class InterviewAssistant extends StreamingPipelineSupport {
      *   风险 15"坏 JSON 不阻塞面试"的目的天然满足，还省掉一层解析和等价于"不解析"的降级代码。
      *   判据：LLM 消费 → 传原文；代码要程序化处理（过滤/统计/聚合）→ 才解析成对象。
      *   当前只有 LLM 消费，故不解析（若 4.3 需要程序化处理，需求明确时再加回）。
+     *   （输出纪律优化 阶段 2 的例外：sanitize 是"文本进文本出"的黑盒裁剪，不算解析消费——
+     *    verifyQuestion 泄露即泄题，必须在注入前剥掉，见 MaterialSanitizer 类注释。）
      *
      * 落库传递的红利也体现在这：如果该会话已分析过，这里直接取到清单，
      * 不用重跑分析 Agent——这就是第 1 步说的"落库而非内存传递"的复用价值。
@@ -278,12 +280,12 @@ public class InterviewAssistant extends StreamingPipelineSupport {
 
         StringBuilder sb = new StringBuilder("""
                 【面试官物料】以下是对候选人资料的分析结果（含代码/JD/简历，JSON），\
-                是你的内部出题素材——其中的追问角度（probingAngle/verifyQuestion）只供备课，\
+                是你的内部出题素材——其中的追问角度（probingAngle）只供备课，\
                 严禁写进回复。基于此出题时一次只问一个切面，从最高优先级考点开始：\n\n""");
         for (CodeProfile profile : profiles) {
             sb.append("资料类型：").append(profile.getProfileType())
               .append("；文件：").append(profile.getFilePath()).append("\n")
-              .append(profile.getFactsJson()).append("\n\n");
+              .append(MaterialSanitizer.sanitize(profile.getFactsJson())).append("\n\n");
         }
         return sb.toString();
     }
