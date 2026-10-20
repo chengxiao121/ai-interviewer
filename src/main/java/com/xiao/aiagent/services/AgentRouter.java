@@ -150,7 +150,11 @@ public class AgentRouter extends StreamingPipelineSupport {
 
         Flux<Message> agentStream;
         try {
-            agentStream = router.streamMessages(buildChatMessages(userMessage, sessionId, candidateId), config);
+            // 路由图的流里混着：路由 LLM 决策文本 + 被选中子图的分析官 JSON + 面试官回复。
+            // InterviewerStreamFilter 按 agent 身份只放行面试官（endsWith("interviewer")，
+            // subgraph_ 前缀多层叠加不影响），其余全部留在图内。
+            agentStream = InterviewerStreamFilter.interviewerOnly(
+                    router.stream(buildChatMessages(userMessage, sessionId, candidateId), config));
         } catch (GraphRunnerException e) {
             log.error("意图路由启动失败：sessionId={}", sessionId, e);
             return Flux.error(e);

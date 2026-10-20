@@ -185,6 +185,11 @@ public abstract class StreamingPipelineSupport {
                             log.warn("输出守卫命中敏感结构 {} 次：sessionId={}, mode={}",
                                     guard.hitCount(), sessionId, outputGuardMode);
                         }
+                        if (fullAnswer.get().isBlank()) {
+                            // 流层过滤（阶段6）白名单过严或模型无输出时，前端会静默空白——
+                            // 留一条可查的日志线索（行为不变：照常写回记忆并释放 checkpoint）
+                            log.warn("本轮面试官输出为空（流层过滤全拦/模型无输出）：sessionId={}", sessionId);
+                        }
                         chatMemory.add(sessionId, List.of(
                                 new UserMessage(userMessage),
                                 new AssistantMessage(fullAnswer.get())));

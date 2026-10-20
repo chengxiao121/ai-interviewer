@@ -198,9 +198,11 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
 
         Flux<Message> agentStream;
         try {
-            // 注意：分析官的输出文字会混进消息流，属预期行为（后端架构文档风险 15）；
-            // 过滤成"助手说的话" + 收尾在基类完成。
-            agentStream = pipeline.streamMessages(buildChatMessages(userMessage, sessionId, candidateId), config);
+            // 分析官输出治理（原风险 15）：改走 stream() + InterviewerStreamFilter——
+            // 只把「面试官说的话」交给下游转发与记忆，分析官的 factsJson（含 verifyQuestion）
+            // 留在图内部供面试官消费，不再混进前端消息流。
+            agentStream = InterviewerStreamFilter.interviewerOnly(
+                    pipeline.stream(buildChatMessages(userMessage, sessionId, candidateId), config));
         } catch (GraphRunnerException e) {
             log.error("资料分析流水线启动失败：sessionId={}", sessionId, e);
             return Flux.error(e);
@@ -263,7 +265,9 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
 
         Flux<Message> agentStream;
         try {
-            agentStream = pipeline.streamMessages(buildChatMessages(analyzerMessage, sessionId, candidateId), config);
+            // 同 chat()：分析官输出留在图内（InterviewerStreamFilter），只转发面试官的话
+            agentStream = InterviewerStreamFilter.interviewerOnly(
+                    pipeline.stream(buildChatMessages(analyzerMessage, sessionId, candidateId), config));
         } catch (GraphRunnerException e) {
             log.error("上传资料流水线启动失败：sessionId={}", sessionId, e);
             return Flux.error(e);
