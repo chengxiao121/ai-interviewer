@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 /**
  * 简历分析 Agent（阶段 4.2 新增）——并行分析流水线的一员。
  *
- * 与 CodeAnalyzerAgent / JdAnalyzerAgent 同构：同一套「读资料 → 结构化事实清单 → saveCodeProfile 落库（type=RESUME）」模式。
+ * 与 CodeAnalyzerAgent / JdAnalyzerAgent 同构：同一套「读资料 → 结构化事实清单 → saveMaterialProfile 落库（type=RESUME）」模式。
  * 产出结构侧重：候选人技能画像 / 项目经验 / 薄弱点——面试官共消费 JD 画像 + 简历画像 + 代码清单，
  * 才能做"岗位要求 vs 候选人能力"的匹配度考察（这正是综合面试区别于单路面试的价值）。
  *
@@ -30,18 +30,18 @@ public class ResumeAnalyzerAgent extends ProfileAnalyzerAgent {
     private static final String SYSTEM_PROMPT = """
             你是一位资深的招聘面试分析专家（简历分析专家），负责把候选人简历转化为可执行的面试考察画像。
             你的任务：分析候选人提供的简历，提炼技能画像、项目经验、亮点与疑似薄弱点，
-            然后调用 saveCodeProfile 工具把分析结果落库（type 参数传 "RESUME"）。
+            然后调用 saveMaterialProfile 工具把分析结果落库（type 参数传 "RESUME"）。
 
             工作流程：
             1. 如果用户在消息中给出了简历文档路径，使用 read_text_file 工具读取文档；如果简历是直接粘贴的文本，直接分析文本；
             2. 提炼候选人画像；
-            3. 调用 saveCodeProfile 工具落库：filePath 传文档路径（粘贴文本可传"用户粘贴的简历"），
+            3. 调用 saveMaterialProfile 工具落库：filePath 传文档路径（粘贴文本可传"用户粘贴的简历"），
                factsJson 传下面约定的 JSON，type 传 "RESUME"。
 
             硬性要求（违反任何一条都算失败）：
             - 只读取【简历文档】，不要读取 JD/代码文件（那是其他分析官的工作），忽略消息里其他文件；
             - 只使用 read_text_file 读取内容，禁止使用 read_multiple_files / directory_tree / list_directory 等浏览类工具；
-            - 分析完成后的【最后一步】必须是调用 saveCodeProfile 落库，严禁在没落库的情况下直接输出分析文本结束。
+            - 分析完成后的【最后一步】必须是调用 saveMaterialProfile 落库，严禁在没落库的情况下直接输出分析文本结束。
 
             候选人画像 JSON 格式（必须严格遵守，不要输出任何 JSON 以外的文字）：
             ```json
@@ -61,7 +61,7 @@ public class ResumeAnalyzerAgent extends ProfileAnalyzerAgent {
             要求：
             - projectHighlights 里 probingAngle 要具体，例如"追问缓存击穿怎么解决的、为什么用这个方案"；
             - weaknessCandidates 是"需要验证的疑点"而非"断言"——写清楚为什么怀疑和怎么验证；
-            - 调用 saveCodeProfile 时，factsJson 参数传完整的 JSON 字符串；
+            - 调用 saveMaterialProfile 时，factsJson 参数传完整的 JSON 字符串；
             - 全程使用中文。
             """;
 

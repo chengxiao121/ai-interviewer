@@ -5,8 +5,8 @@ import com.alibaba.cloud.ai.graph.agent.Builder;
 import com.alibaba.cloud.ai.graph.agent.ReactAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
-import com.xiao.aiagent.entity.CodeProfile;
-import com.xiao.aiagent.repository.CodeProfileRepository;
+import com.xiao.aiagent.entity.MaterialProfile;
+import com.xiao.aiagent.repository.MaterialProfileRepository;
 import com.xiao.aiagent.tools.InterviewTools;
 import com.xiao.aiagent.tools.SessionKeys;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -135,7 +135,7 @@ public class InterviewAssistant extends StreamingPipelineSupport {
     // 代码事实清单仓储（阶段 4.1 新增）：双 Agent 流水线里，分析 Agent 把清单落这表，
     // 面试官从这里按 sessionId 取清单出题。这就是 Agent 间"落库传递数据契约"的读取端
     // （chatMemory/memorySaver/RAG/薄弱点/计划/评估等公共依赖由基类 StreamingPipelineSupport 持有）
-    private final CodeProfileRepository codeProfileRepository;
+    private final MaterialProfileRepository materialProfileRepository;
 
     public InterviewAssistant(ChatModel chatModel,
                               InterviewTools interviewTools,
@@ -143,7 +143,7 @@ public class InterviewAssistant extends StreamingPipelineSupport {
                               KnowledgeSearchService knowledgeSearchService,
                               ChatMemory chatMemory,
                               MemorySaver memorySaver,
-                              CodeProfileRepository codeProfileRepository,
+                              MaterialProfileRepository materialProfileRepository,
                               WeaknessProfileService weaknessProfileService,
                               InterviewPlanService interviewPlanService,
                               AnswerEvaluatorService answerEvaluatorService,
@@ -183,7 +183,7 @@ public class InterviewAssistant extends StreamingPipelineSupport {
         }
 
         this.agent = builder.build();
-        this.codeProfileRepository = codeProfileRepository;
+        this.materialProfileRepository = materialProfileRepository;
     }
 
     /**
@@ -279,7 +279,7 @@ public class InterviewAssistant extends StreamingPipelineSupport {
      * 不用重跑分析 Agent——这就是第 1 步说的"落库而非内存传递"的复用价值。
      */
     private String loadCodeFacts(String sessionId) {
-        List<CodeProfile> profiles = codeProfileRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
+        List<MaterialProfile> profiles = materialProfileRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
         if (profiles == null || profiles.isEmpty()) {
             // 该会话没有代码分析记录 → 不是代码评审面试，正常走题库出题
             return "";
@@ -289,7 +289,7 @@ public class InterviewAssistant extends StreamingPipelineSupport {
                 【面试官物料】以下是对候选人资料的分析结果（含代码/JD/简历，JSON），\
                 是你的内部出题素材——其中的追问角度（probingAngle）只供备课，\
                 严禁写进回复。基于此出题时一次只问一个切面，从最高优先级考点开始：\n\n""");
-        for (CodeProfile profile : profiles) {
+        for (MaterialProfile profile : profiles) {
             sb.append("资料类型：").append(profile.getProfileType())
               .append("；文件：").append(profile.getFilePath()).append("\n")
               .append(MaterialSanitizer.sanitize(profile.getFactsJson())).append("\n\n");

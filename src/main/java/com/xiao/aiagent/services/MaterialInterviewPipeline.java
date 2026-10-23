@@ -7,7 +7,7 @@ import com.alibaba.cloud.ai.graph.agent.flow.agent.ParallelAgent.ConcatenationMe
 import com.alibaba.cloud.ai.graph.agent.flow.agent.SequentialAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
-import com.xiao.aiagent.repository.CodeProfileRepository;
+import com.xiao.aiagent.repository.MaterialProfileRepository;
 import com.xiao.aiagent.tools.SessionKeys;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -97,13 +97,13 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
     private final JdAnalyzerAgent jdAnalyzer;
     private final ResumeAnalyzerAgent resumeAnalyzer;
     private final InterviewAssistant interviewer;
-    private final CodeProfileRepository codeProfileRepository;
+    private final MaterialProfileRepository materialProfileRepository;
 
     public MaterialInterviewPipeline(CodeAnalyzerAgent codeAnalyzer,
                                      JdAnalyzerAgent jdAnalyzer,
                                      ResumeAnalyzerAgent resumeAnalyzer,
                                      InterviewAssistant interviewer,
-                                     CodeProfileRepository codeProfileRepository,
+                                     MaterialProfileRepository materialProfileRepository,
                                      ChatMemory chatMemory,
                                      MemorySaver memorySaver,
                                      KnowledgeSearchService knowledgeSearchService,
@@ -120,7 +120,7 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
         this.jdAnalyzer = jdAnalyzer;
         this.resumeAnalyzer = resumeAnalyzer;
         this.interviewer = interviewer;
-        this.codeProfileRepository = codeProfileRepository;
+        this.materialProfileRepository = materialProfileRepository;
 
         log.info("资料分析流水线就绪：分析官按组合惰性构建（最多 8 种），全量组合供路由注册");
     }
@@ -173,7 +173,7 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
         Set<Material> mentioned = detectMaterials(userMessage);
         Set<Material> pending = EnumSet.noneOf(Material.class);
         for (Material m : mentioned) {
-            if (!codeProfileRepository.existsBySessionIdAndProfileType(sessionId, m.profileType())) {
+            if (!materialProfileRepository.existsBySessionIdAndProfileType(sessionId, m.profileType())) {
                 pending.add(m);
             }
         }
@@ -240,7 +240,7 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
         // 待分析 = 上传类型中尚未落库的（复用红利按类型逐类生效，与 chat() 同判据）
         Set<Material> pending = EnumSet.noneOf(Material.class);
         for (Material m : materialTexts.keySet()) {
-            if (!codeProfileRepository.existsBySessionIdAndProfileType(sessionId, m.profileType())) {
+            if (!materialProfileRepository.existsBySessionIdAndProfileType(sessionId, m.profileType())) {
                 pending.add(m);
             }
         }

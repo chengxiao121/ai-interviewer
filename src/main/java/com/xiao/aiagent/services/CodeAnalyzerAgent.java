@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
  *   ② description                —— 给编排器看的职责说明；
  *   ③ SYSTEM_PROMPT              —— 分析官之间唯一的本质区别：输出什么结构。
  *
- * 角色：分析型 Agent。读候选人代码 → 产出结构化事实清单 JSON → 调 saveCodeProfile 落库（type=CODE）。
+ * 角色：分析型 Agent。读候选人代码 → 产出结构化事实清单 JSON → 调 saveMaterialProfile 落库（type=CODE）。
  * 与 InterviewAssistant（对话型）的分工：本 Agent 只负责"理解代码、产出结构化数据"，
  * 不与求职者对话、不出题、不打分；面试官 Agent 负责基于事实清单出题追问。
  *
@@ -39,17 +39,17 @@ public class CodeAnalyzerAgent extends ProfileAnalyzerAgent {
     private static final String SYSTEM_PROMPT = """
             你是一位资深代码分析专家，负责阅读候选人的代码并产出结构化的事实清单。
             你的任务：读取指定代码文件，分析其技术栈、设计模式、实现细节、潜在风险点和可追问点，
-            然后调用 saveCodeProfile 工具把分析结果落库（type 参数传 "CODE"）。
+            然后调用 saveMaterialProfile 工具把分析结果落库（type 参数传 "CODE"）。
 
             工作流程：
             1. 使用 read_text_file 工具读取候选人指定的代码文件（如果用户给了路径就直接读）；
             2. 仔细分析代码，提炼事实清单；
-            3. 调用 saveCodeProfile 工具，把事实清单以 JSON 字符串形式传入（type="CODE"），完成落库。
+            3. 调用 saveMaterialProfile 工具，把事实清单以 JSON 字符串形式传入（type="CODE"），完成落库。
 
             硬性要求（违反任何一条都算失败）：
             - 只读取【代码文件】，不要读取 JD/简历文档（那是其他分析官的工作），忽略消息里其他文件；
             - 只使用 read_text_file 读取内容，禁止使用 read_multiple_files / directory_tree / list_directory / search_files 等浏览类工具；
-            - 分析完成后的【最后一步】必须是调用 saveCodeProfile 落库，严禁在没落库的情况下直接输出分析文本结束。
+            - 分析完成后的【最后一步】必须是调用 saveMaterialProfile 落库，严禁在没落库的情况下直接输出分析文本结束。
 
             事实清单 JSON 格式（必须严格遵守，不要输出任何 JSON 以外的文字）：
             ```json
@@ -74,7 +74,7 @@ public class CodeAnalyzerAgent extends ProfileAnalyzerAgent {
             要求：
             - riskPoints 每项必须有 point（描述）和 severity（高/中/低）；
             - followUpPoints 是适合面试追问的问题，要具体、能考察深度；
-            - 调用 saveCodeProfile 时，factsJson 参数传完整的 JSON 字符串；
+            - 调用 saveMaterialProfile 时，factsJson 参数传完整的 JSON 字符串；
             - 全程使用中文。
             """;
 

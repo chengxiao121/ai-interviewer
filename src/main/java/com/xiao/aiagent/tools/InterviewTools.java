@@ -1,7 +1,7 @@
 package com.xiao.aiagent.tools;
 
-import com.xiao.aiagent.entity.CodeProfile;
-import com.xiao.aiagent.repository.CodeProfileRepository;
+import com.xiao.aiagent.entity.MaterialProfile;
+import com.xiao.aiagent.repository.MaterialProfileRepository;
 import com.xiao.aiagent.repository.ScoreRecordRepository;
 import com.xiao.aiagent.services.WeaknessProfileService;
 import org.slf4j.Logger;
@@ -21,7 +21,7 @@ import java.util.List;
  *
  * 阶段 4.1 起本类与 CodeAnalyzerTools 分工：
  *   - 这里是【面试官】的工具：questionStats / getWeaknessProfile / calculator / getCodeFacts；
- *   - CodeAnalyzerTools 是【分析官】的工具：saveCodeProfile。
+ *   - CodeAnalyzerTools 是【分析官】的工具：saveMaterialProfile。
  *
  * 阶段 5.3 变更：scoreRecord 工具已删除——评分落库移交 AnswerEvaluatorService（代码侧
  * 确定性落库）。为什么删而不是留：工具留着，"模型工具写"与"服务代码写"两条落库路径并存，
@@ -33,15 +33,15 @@ public class InterviewTools {
     private static final Logger log = LoggerFactory.getLogger(InterviewTools.class);
 
     private final ScoreRecordRepository scoreRecordRepository;
-    private final CodeProfileRepository codeProfileRepository;
+    private final MaterialProfileRepository materialProfileRepository;
     /** 跨会话薄弱点回顾（4.3 新增）：薄弱点摘要的唯一数据源，工具与开场注入共用同一段文本 */
     private final WeaknessProfileService weaknessProfileService;
 
     public InterviewTools(ScoreRecordRepository scoreRecordRepository,
-                          CodeProfileRepository codeProfileRepository,
+                          MaterialProfileRepository materialProfileRepository,
                           WeaknessProfileService weaknessProfileService) {
         this.scoreRecordRepository = scoreRecordRepository;
-        this.codeProfileRepository = codeProfileRepository;
+        this.materialProfileRepository = materialProfileRepository;
         this.weaknessProfileService = weaknessProfileService;
     }
 
@@ -133,13 +133,13 @@ public class InterviewTools {
         String sessionId = SessionKeys.rootSessionId(toolContext);
         log.info("工具调用 getCodeFacts：sessionId={}", sessionId);
 
-        List<CodeProfile> profiles = codeProfileRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
+        List<MaterialProfile> profiles = materialProfileRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
         if (profiles == null || profiles.isEmpty()) {
             return "当前会话还没有代码分析记录，请按普通面试流程出题。";
         }
 
         StringBuilder sb = new StringBuilder("分析事实清单如下（含 JD/简历/代码三类资料）：\n\n");
-        for (CodeProfile profile : profiles) {
+        for (MaterialProfile profile : profiles) {
             sb.append("资料类型：").append(profile.getProfileType())
               .append("；文件：").append(profile.getFilePath()).append("\n")
               .append(profile.getFactsJson()).append("\n\n");

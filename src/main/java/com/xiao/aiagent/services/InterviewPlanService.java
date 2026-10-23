@@ -3,7 +3,7 @@ package com.xiao.aiagent.services;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xiao.aiagent.entity.InterviewPlan;
-import com.xiao.aiagent.repository.CodeProfileRepository;
+import com.xiao.aiagent.repository.MaterialProfileRepository;
 import com.xiao.aiagent.repository.InterviewPlanRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,16 +80,16 @@ public class InterviewPlanService {
     }
 
     private final ChatModel chatModel;
-    private final CodeProfileRepository codeProfileRepository;
+    private final MaterialProfileRepository materialProfileRepository;
     private final InterviewPlanRepository interviewPlanRepository;
     private final ObjectMapper objectMapper;
 
     public InterviewPlanService(ChatModel chatModel,
-                                CodeProfileRepository codeProfileRepository,
+                                MaterialProfileRepository materialProfileRepository,
                                 InterviewPlanRepository interviewPlanRepository,
                                 ObjectMapper objectMapper) {
         this.chatModel = chatModel;
-        this.codeProfileRepository = codeProfileRepository;
+        this.materialProfileRepository = materialProfileRepository;
         this.interviewPlanRepository = interviewPlanRepository;
         this.objectMapper = objectMapper;
     }
@@ -108,7 +108,7 @@ public class InterviewPlanService {
             InterviewPlan plan = existing.get();
             // 升级规则：临时计划（USER）+ JD 画像已落库 → 用 JD 考察矩阵重生成一次（评分基准从此以 JD 为准）
             if (SOURCE_USER.equals(plan.getSource())
-                    && codeProfileRepository.existsBySessionIdAndProfileType(sessionId, PROFILE_TYPE_JD)) {
+                    && materialProfileRepository.existsBySessionIdAndProfileType(sessionId, PROFILE_TYPE_JD)) {
                 log.info("检测到 JD 画像已落库，升级面试计划：sessionId={}（USER → JD）", sessionId);
                 InterviewPlan upgraded = generate(userMessage, sessionId, candidateId);
                 if (upgraded != null) {
@@ -243,12 +243,12 @@ public class InterviewPlanService {
     }
 
     private boolean jdProfileExists(String sessionId) {
-        return codeProfileRepository.existsBySessionIdAndProfileType(sessionId, PROFILE_TYPE_JD);
+        return materialProfileRepository.existsBySessionIdAndProfileType(sessionId, PROFILE_TYPE_JD);
     }
 
     /** 取该会话 JD 画像的 factsJson（多条取第一条）；没有返回 null */
     private String findJdFacts(String sessionId) {
-        return codeProfileRepository.findBySessionIdOrderByCreatedAtAsc(sessionId).stream()
+        return materialProfileRepository.findBySessionIdOrderByCreatedAtAsc(sessionId).stream()
                 .filter(p -> PROFILE_TYPE_JD.equals(p.getProfileType()))
                 .findFirst()
                 .map(p -> p.getFactsJson())

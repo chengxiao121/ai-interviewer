@@ -31,7 +31,7 @@ import java.util.List;
  * 可变点（prompt）由子类通过构造参数注入，⚠️ 注意用构造参数而非抽象方法——
  * 抽象方法在父类构造器里调用有"子类字段还没初始化"的风险，构造参数没有。
  *
- * 与分析官搭档的工具：CodeAnalyzerTools.saveCodeProfile 带 type 参数，
+ * 与分析官搭档的工具：CodeAnalyzerTools.saveMaterialProfile 带 type 参数，
  * 三个分析官共用同一把"落库扳机"，靠 type（CODE/JD/RESUME）区分来源。
  */
 public abstract class ProfileAnalyzerAgent {
@@ -52,7 +52,7 @@ public abstract class ProfileAnalyzerAgent {
 
             【资料守门】启动后第一步先判断：上下文中是否存在你负责的那一类资料（明确的文件路径，或用户直接粘贴的资料文本）。
             若不存在：直接回复"无我负责的资料，跳过分析"并立即结束——禁止调用任何工具（包括 read_text_file
-            等一切读取工具）、禁止调用 saveCodeProfile 落库、禁止凭想象编造任何分析内容。
+            等一切读取工具）、禁止调用 saveMaterialProfile 落库、禁止凭想象编造任何分析内容。
             若存在：按上方流程正常执行。本守门优先级最高，与其他任何要求冲突时以本条为准。
             """;
 
@@ -72,7 +72,7 @@ public abstract class ProfileAnalyzerAgent {
         this.systemPrompt = systemPrompt + MATERIAL_GATE;
 
         // MCP 工具注入：与 InterviewAssistant 一样的降级兼容策略
-        // 未配置 MCP 或 npx 拉包失败时 getIfAvailable() 返回 null，Agent 只用内置 saveCodeProfile
+        // 未配置 MCP 或 npx 拉包失败时 getIfAvailable() 返回 null，Agent 只用内置 saveMaterialProfile
         // 但那样就读不了资料了——分析官读文件强依赖 MCP read_file，所以这里打 WARN 提醒
         ToolCallbackProvider mcpProvider = mcpToolCallbackProvider.getIfAvailable();
         if (mcpProvider != null) {
@@ -81,13 +81,13 @@ public abstract class ProfileAnalyzerAgent {
             log.warn("未检测到 MCP 工具，分析 Agent[{}] 无法读取文件！", name);
         }
 
-        // ── 拼装"分析循环"── 与分析官搭档的工具是 CodeAnalyzerTools（saveCodeProfile 落库）
+        // ── 拼装"分析循环"── 与分析官搭档的工具是 CodeAnalyzerTools（saveMaterialProfile 落库）
         Builder builder = ReactAgent.builder()
                 .name(name)                       // agent 名，图日志里显示（编排时能看到这个节点）
                 .description(description)         // 职责描述（ParallelAgent 节点、日志里能看见）
                 .systemPrompt(systemPrompt)       // 【大脑人设】各分析官的输出结构约定
                 .model(chatModel)                 // 【大脑本体】同一个 qwen 模型
-                .methodTools(analyzerTools)       // 【武器】saveCodeProfile（落库，type 区分来源）
+                .methodTools(analyzerTools)       // 【武器】saveMaterialProfile（落库，type 区分来源）
                 .outputKey(name)                  // 【并行合并要件】ParallelAgent 要求每个子 Agent 的
                                                   // outputKey 唯一（实测：不设置会打 "no outputKey defined"
                                                   // 警告；三个都设成 messages 会被校验拒绝 "Duplicate output
@@ -134,7 +134,7 @@ public abstract class ProfileAnalyzerAgent {
                 userMessage.length() > 80 ? userMessage.substring(0, 80) + "..." : userMessage);
 
         try {
-            // 同步调用：跑完整个 ReAct 循环（读资料 → 分析 → 调 saveCodeProfile 落库）
+            // 同步调用：跑完整个 ReAct 循环（读资料 → 分析 → 调 saveMaterialProfile 落库）
             // invoke 返回最终 state，我们这里不需要取返回值——落库已由工具完成
             agent.invoke(messages, config);
             log.info("分析 Agent 完成：sessionId={}", sessionId);

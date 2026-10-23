@@ -68,7 +68,7 @@ public class InterviewPlan {
     @Column(nullable = false, length = 16)
     private String source;
 
-    /** 生成/升级时间（服务端生成，不依赖 LLM 传时间，与 ScoreRecord/CodeProfile 一致） */
+    /** 生成/升级时间（服务端生成，不依赖 LLM 传时间，与 ScoreRecord/MaterialProfile 一致） */
     @Column(nullable = false)
     private LocalDateTime createdAt;
 

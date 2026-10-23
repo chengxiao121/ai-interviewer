@@ -10,7 +10,7 @@ import org.springframework.ai.chat.model.ToolContext;
  * 为什么需要它（4.2 验收实测发现的坑）：
  *   LlmRoutingAgent / SequentialAgent 这类编排 Agent 派生子 Agent 时，
  *   框架会给子 Agent 的 threadId 自动追加 `_subgraph_<agent名>` 后缀，
- *   于是子图里运行的工具（saveCodeProfile/getCodeFacts/scoreRecord/questionStats）
+ *   于是子图里运行的工具（saveMaterialProfile/getCodeFacts/scoreRecord/questionStats）
  *   看到的 threadId 形如 `route-test-3_subgraph_code-review-pipeline`。
  *   若直接把带后缀的 threadId 当 sessionId 落库/查询，会出现三种故障：
  *     1. 代码评审复用快路径失效：外层查 existsBySessionId(干净 id) 永远查不到带后缀的记录；

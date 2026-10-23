@@ -4,7 +4,7 @@ import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.flow.agent.LlmRoutingAgent;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.graph.exception.GraphRunnerException;
-import com.xiao.aiagent.repository.CodeProfileRepository;
+import com.xiao.aiagent.repository.MaterialProfileRepository;
 import com.xiao.aiagent.tools.SessionKeys;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.memory.ChatMemory;
@@ -66,14 +66,14 @@ public class AgentRouter extends StreamingPipelineSupport {
     // 资料分析流水线（规则路径直接调它的 chat()；getPipeline() 注册为路由子 Agent）
     private final MaterialInterviewPipeline materialInterviewPipeline;
     // 判断"该会话分析过资料没"——复用快路径的开关
-    private final CodeProfileRepository codeProfileRepository;
+    private final MaterialProfileRepository materialProfileRepository;
     // 上传资料存储（阶段 7）：chatWithMaterials 按 materialIds 取文本
     private final MaterialStoreService materialStoreService;
 
     public AgentRouter(ChatModel chatModel,
                        MaterialInterviewPipeline materialInterviewPipeline,
                        InterviewAssistant interviewer,
-                       CodeProfileRepository codeProfileRepository,
+                       MaterialProfileRepository materialProfileRepository,
                        MaterialStoreService materialStoreService,
                        ChatMemory chatMemory,
                        MemorySaver memorySaver,
@@ -104,7 +104,7 @@ public class AgentRouter extends StreamingPipelineSupport {
 
         this.materialInterviewPipeline = materialInterviewPipeline;
         this.interviewer = interviewer;
-        this.codeProfileRepository = codeProfileRepository;
+        this.materialProfileRepository = materialProfileRepository;
         this.materialStoreService = materialStoreService;
 
         log.info("意图路由 Agent 构建完成：规则前置（复用快路径 + 资料规则路径）+ 2 路语义路由（material-interview / interviewer），fallback=interviewer");
@@ -127,7 +127,7 @@ public class AgentRouter extends StreamingPipelineSupport {
         // ── 第一道：复用快路径（4.1 引入，5.5 泛化）──
         // 该会话已分析过资料 + 本条消息没提新资料 → 必然是继续面试 → 直连面试官。
         // （面试官 loadCodeFacts 会前置注入库中全部清单；统计/追问/寒暄也都由它吸收）
-        if (codeProfileRepository.existsBySessionId(sessionId) && materials.isEmpty()) {
+        if (materialProfileRepository.existsBySessionId(sessionId) && materials.isEmpty()) {
             log.info("会话 {} 已有资料分析记录且未提新资料，走复用快路径直连面试官（跳过路由）", sessionId);
             return interviewer.chat(userMessage, sessionId, candidateId);
         }

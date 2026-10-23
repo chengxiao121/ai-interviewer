@@ -1,7 +1,7 @@
 package com.xiao.aiagent.tools;
 
-import com.xiao.aiagent.entity.CodeProfile;
-import com.xiao.aiagent.repository.CodeProfileRepository;
+import com.xiao.aiagent.entity.MaterialProfile;
+import com.xiao.aiagent.repository.MaterialProfileRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ToolContext;
@@ -17,7 +17,7 @@ import java.time.LocalDateTime;
  * 与 InterviewTools 的区别：InterviewTools 是【面试官】的工具（评分/统计/计算），
  * 这里是【分析官】的工具（把分析结果落库）。两个 Agent 各用各的工具，职责分离。
  *
- * 当前只有一个工具 saveCodeProfile：分析 Agent 读完代码、产出事实清单 JSON 后调用，
+ * 当前只有一个工具 saveMaterialProfile：分析 Agent 读完代码、产出事实清单 JSON 后调用，
  * 把清单落库到 code_profile 表，供面试官 Agent 按需取用。
  */
 @Component
@@ -25,10 +25,10 @@ public class CodeAnalyzerTools {
 
     private static final Logger log = LoggerFactory.getLogger(CodeAnalyzerTools.class);
 
-    private final CodeProfileRepository codeProfileRepository;
+    private final MaterialProfileRepository materialProfileRepository;
 
-    public CodeAnalyzerTools(CodeProfileRepository codeProfileRepository) {
-        this.codeProfileRepository = codeProfileRepository;
+    public CodeAnalyzerTools(MaterialProfileRepository materialProfileRepository) {
+        this.materialProfileRepository = materialProfileRepository;
     }
 
     /**
@@ -50,7 +50,7 @@ public class CodeAnalyzerTools {
      * @return 落库结果提示，供 LLM 确认
      */
     @Tool(description = "保存分析事实清单到数据库。分析完资料后必须调用此工具，把结构化分析结果落库，供面试官取用。CODE 表示代码、JD 表示岗位描述、RESUME 表示简历。")
-    public String saveCodeProfile(
+    public String saveMaterialProfile(
             @ToolParam(description = "分析的源文件路径（代码文件绝对路径，或 JD/简历文档路径；粘贴文本可传资料名称）") String filePath,
             @ToolParam(description = "事实清单 JSON 字符串（各分析官按自己的定义输出，包含技术栈/实现细节/可追问点等）") String factsJson,
             @ToolParam(description = "资料类型：CODE=代码 / JD=岗位描述 / RESUME=简历，必须与你的身份一致") String type,
@@ -60,11 +60,11 @@ public class CodeAnalyzerTools {
         // 与 InterviewTools 各工具同一套机制）
         String sessionId = SessionKeys.rootSessionId(toolContext);
 
-        log.info("工具调用 saveCodeProfile：sessionId={}, type={}, filePath={}, jsonLength={}",
+        log.info("工具调用 saveMaterialProfile：sessionId={}, type={}, filePath={}, jsonLength={}",
                 sessionId, type, filePath, factsJson != null ? factsJson.length() : 0);
 
-        CodeProfile profile = new CodeProfile(sessionId, filePath, type, factsJson, LocalDateTime.now());
-        CodeProfile saved = codeProfileRepository.save(profile);
+        MaterialProfile profile = new MaterialProfile(sessionId, filePath, type, factsJson, LocalDateTime.now());
+        MaterialProfile saved = materialProfileRepository.save(profile);
 
         log.info("事实清单落库成功：id={}, sessionId={}, type={}, filePath={}", saved.getId(), sessionId, type, filePath);
 

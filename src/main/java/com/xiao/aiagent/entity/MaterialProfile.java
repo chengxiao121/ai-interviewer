@@ -6,10 +6,11 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * 代码分析事实清单，对应 PostgreSQL code_profile 表（阶段 4.1 新增）。
+ * 资料分析事实清单（代码/JD/简历三类通用），对应 PostgreSQL code_profile 表（阶段 4.1 新增）。
  *
  * 作用：这是【双 Agent 数据契约的物理载体】。
- *   CodeAnalyzerAgent（分析型）读候选人代码 → 产出结构化 JSON 事实清单 → 落到这张表；
+ *   分析型 Agent（CodeAnalyzerAgent/JdAnalyzerAgent/ResumeAnalyzerAgent）读上传资料
+ *   → 产出结构化 JSON 事实清单 → 落到这张表（profileType 区分类型）；
  *   InterviewAssistant（对话型，面试官）出题时从这里按 sessionId 取清单，基于清单出题追问。
  *
  * 为什么落库而非内存传递（4.1 核心设计决策）：
@@ -18,12 +19,16 @@ import java.time.LocalDateTime;
  *
  * 与 ScoreRecord 的区别：ScoreRecord 存"评估结果"（下游产物），
  *   code_profile 存"分析物料"（上游产物），一上一下构成闭环的两端。
+ *
+ * 命名说明（P3 重构）：原类名 CodeProfile 产生于只有代码分析的时期，
+ *   4.2 起实际承载 CODE/JD/RESUME 三类资料，故更名 MaterialProfile 与语义一致。
+ *   表名保持 code_profile 不变（Flyway 基线已锁定，不改表只改类名）。
  */
 @Entity
 @Table(name = "code_profile")
 @Data
 @NoArgsConstructor
-public class CodeProfile {
+public class MaterialProfile {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -60,7 +65,7 @@ public class CodeProfile {
     private LocalDateTime createdAt;
 
     /** 全参构造（@Data 不生成） */
-    public CodeProfile(String sessionId, String filePath, String profileType, String factsJson, LocalDateTime createdAt) {
+    public MaterialProfile(String sessionId, String filePath, String profileType, String factsJson, LocalDateTime createdAt) {
         this.sessionId = sessionId;
         this.filePath = filePath;
         this.profileType = profileType;

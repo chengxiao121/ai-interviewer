@@ -2,7 +2,7 @@ package com.xiao.aiagent.services;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xiao.aiagent.entity.InterviewPlan;
-import com.xiao.aiagent.repository.CodeProfileRepository;
+import com.xiao.aiagent.repository.MaterialProfileRepository;
 import com.xiao.aiagent.repository.InterviewPlanRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,22 +44,22 @@ class InterviewPlanServiceEnsurePlanTest {
             "[{\"topic\":\"线程池参数\",\"priority\":\"高\",\"difficulty\":\"进阶\"}]";
 
     private ChatModel chatModel;
-    private CodeProfileRepository codeProfileRepository;
+    private MaterialProfileRepository materialProfileRepository;
     private InterviewPlanRepository planRepository;
     private InterviewPlanService service;
 
     @BeforeEach
     void setUp() {
         chatModel = Mockito.mock(ChatModel.class);
-        codeProfileRepository = Mockito.mock(CodeProfileRepository.class);
+        materialProfileRepository = Mockito.mock(MaterialProfileRepository.class);
         planRepository = Mockito.mock(InterviewPlanRepository.class);
-        service = new InterviewPlanService(chatModel, codeProfileRepository, planRepository, new ObjectMapper());
+        service = new InterviewPlanService(chatModel, materialProfileRepository, planRepository, new ObjectMapper());
     }
 
     /** 驱动条件：库中无 JD 画像（source=USER）+ 规划模型返回合法考点数组 */
     private void mockPlannerReturnsTopics() {
-        when(codeProfileRepository.existsBySessionIdAndProfileType(SESSION_ID, "JD")).thenReturn(false);
-        when(codeProfileRepository.findBySessionIdOrderByCreatedAtAsc(SESSION_ID)).thenReturn(List.of());
+        when(materialProfileRepository.existsBySessionIdAndProfileType(SESSION_ID, "JD")).thenReturn(false);
+        when(materialProfileRepository.findBySessionIdOrderByCreatedAtAsc(SESSION_ID)).thenReturn(List.of());
         when(chatModel.call(any(Prompt.class))).thenReturn(new ChatResponse(
                 List.of(new Generation(new AssistantMessage(TOPICS_JSON)))));
     }
