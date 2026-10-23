@@ -21,7 +21,9 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: 'dist',
+    // 直接输出到后端 static 目录（替代手工拷贝）：emptyOutDir 每次构建先清空，
+    // 根治 static/assets 里积累多个历史版本 hash 产物的问题
+    outDir: '../src/main/resources/static',
     emptyOutDir: true,
   },
 })
