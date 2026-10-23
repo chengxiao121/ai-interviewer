@@ -1,4 +1,5 @@
 package com.xiao.aiagent.common;
+import com.xiao.aiagent.dto.ApiError;
 import com.xiao.aiagent.service.MaterialStoreService;
 import com.xiao.aiagent.agent.MaterialInterviewPipeline;
 
@@ -31,10 +32,6 @@ import java.util.UUID;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
-
-    /** 统一错误体：{code, message, traceId}——code 与 HTTP 状态一致，前端按 code 分类提示 */
-    public record ApiError(int code, String message, String traceId) {
-    }
 
     /**
      * 业务校验类异常 → 400，中文 message 原样透传给前端。

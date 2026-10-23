@@ -1,5 +1,6 @@
 package com.xiao.aiagent.controller;
 
+import com.xiao.aiagent.dto.ChatRequest;
 import com.xiao.aiagent.entity.InterviewSession;
 import com.xiao.aiagent.repository.InterviewSessionRepository;
 import com.xiao.aiagent.agent.AgentRouter;
@@ -112,15 +113,6 @@ public class AssistantController {
 
     private static ResponseStatusException badRequest(String message) {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
-    }
-
-    /**
-     * chat 请求体（阶段 8）：
-     *   - candidateName：候选人姓名（入场首轮必传；已有绑定的会话可省略）；
-     *   - materialIds：上传资料 id（入场首轮必传且须含简历；已有绑定的会话由绑定决定）。
-     */
-    public record ChatRequest(String userMessage, String sessionId, String candidateName,
-                              List<String> materialIds) {
     }
 
 }

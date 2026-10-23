@@ -1,5 +1,7 @@
 package com.xiao.aiagent.service;
 
+import com.xiao.aiagent.dto.MaterialMeta;
+import com.xiao.aiagent.dto.UploadResult;
 import com.xiao.aiagent.agent.MaterialInterviewPipeline;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -61,16 +63,6 @@ public class MaterialStoreService {
         this.objectMapper = objectMapper;
         Files.createDirectories(rootDir);
         log.info("上传资料存储就绪：{}", rootDir);
-    }
-
-    /** 上传资料元数据（落盘 sidecar JSON，供追溯；id 本身已编码类型与内容哈希） */
-    public record MaterialMeta(String materialId, String type, String fileName,
-                               String md5, int charCount, String createdAt) {
-    }
-
-    /** 上传接口返回体 */
-    public record UploadResult(String materialId, String type, String fileName,
-                               int charCount, boolean duplicated) {
     }
 
     /**

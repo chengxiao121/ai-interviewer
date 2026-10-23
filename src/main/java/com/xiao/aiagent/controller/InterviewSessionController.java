@@ -1,5 +1,6 @@
 package com.xiao.aiagent.controller;
 
+import com.xiao.aiagent.dto.InterviewSessionDto;
 import com.xiao.aiagent.entity.InterviewSession;
 import com.xiao.aiagent.repository.InterviewSessionRepository;
 import com.xiao.aiagent.service.MaterialStoreService;
@@ -68,12 +69,6 @@ public class InterviewSessionController {
         }
         return new InterviewSessionDto(session.getSessionId(), session.getCandidateId(),
                 session.materialIds(), session.getCreatedAt().toString(), resumeFileName, jdFileName);
-    }
-
-    /** 会话绑定 DTO（resumeFileName/jdFileName 供会话卡片展示，可为 null） */
-    public record InterviewSessionDto(String sessionId, String candidateId,
-                                      List<String> materialIds, String createdAt,
-                                      String resumeFileName, String jdFileName) {
     }
 
 }

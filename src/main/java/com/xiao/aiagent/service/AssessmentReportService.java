@@ -1,4 +1,5 @@
 package com.xiao.aiagent.service;
+import com.xiao.aiagent.dto.PlanTopic;
 import com.xiao.aiagent.common.LlmJson;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -97,7 +98,7 @@ public class AssessmentReportService {
      */
     public Map<String, Object> generate(String sessionId, String candidateId) {
         InterviewPlan plan = interviewPlanRepository.findBySessionId(sessionId).orElse(null);
-        List<InterviewPlanService.PlanTopic> plannedTopics =
+        List<PlanTopic> plannedTopics =
                 plan == null ? List.of() : interviewPlanService.parseTopics(plan.getTopicsJson());
         List<ScoreRecord> records = scoreRecordRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
 
@@ -107,7 +108,7 @@ public class AssessmentReportService {
         List<String> uncoveredTopics = new ArrayList<>();
         List<String> matchedTopicNames = new ArrayList<>();
 
-        for (InterviewPlanService.PlanTopic pt : plannedTopics) {
+        for (PlanTopic pt : plannedTopics) {
             List<ScoreRecord> matched = takeMatched(pt.topic(), byTopic);
             if (matched.isEmpty()) {
                 uncoveredTopics.add(pt.topic());          // 计划了、一道没考

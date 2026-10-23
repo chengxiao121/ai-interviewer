@@ -1,4 +1,5 @@
 package com.xiao.aiagent.service;
+import com.xiao.aiagent.dto.PlanTopic;
 import com.xiao.aiagent.common.LlmJson;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -130,12 +131,12 @@ public class AnswerEvaluatorService {
             return new EvaluationOutcome(false, "");    // 首轮：还没有"上一问"，无从评估
         }
 
-        List<InterviewPlanService.PlanTopic> vocabulary = plan == null
+        List<PlanTopic> vocabulary = plan == null
                 ? List.of()
                 : interviewPlanService.parseTopics(plan.getTopicsJson());
         String input = "【考点词表】" + (vocabulary.isEmpty()
                 ? "（本场无计划，按回答内容自由归类考点）"
-                : vocabulary.stream().map(InterviewPlanService.PlanTopic::topic).toList())
+                : vocabulary.stream().map(PlanTopic::topic).toList())
                 + "\n\n【上一问】\n" + truncateTail(lastAssistant, MAX_QUESTION_PROMPT_LEN)
                 + "\n\n【本轮回答】\n" + truncateHead(userMessage, MAX_ANSWER_PROMPT_LEN);
 
@@ -192,17 +193,17 @@ public class AnswerEvaluatorService {
      * 精确匹配 → 包含匹配归一到词表措辞 → 兜底"计划外：<原文>"。词表为空（无计划）时自由归类。
      * 包私有 static：不用实例状态，收窄可见性同时可被同包单测直接调用（避免反射测试）。
      */
-    static String resolveTopic(String topic, List<InterviewPlanService.PlanTopic> vocabulary) {
+    static String resolveTopic(String topic, List<PlanTopic> vocabulary) {
         String t = topic.trim();
         if (vocabulary.isEmpty()) {
             return truncateHead(t, MAX_TOPIC_COL_LEN);
         }
-        for (InterviewPlanService.PlanTopic v : vocabulary) {
+        for (PlanTopic v : vocabulary) {
             if (v.topic().equals(t)) {
                 return v.topic();
             }
         }
-        for (InterviewPlanService.PlanTopic v : vocabulary) {
+        for (PlanTopic v : vocabulary) {
             if (t.contains(v.topic()) || v.topic().contains(t)) {
                 return v.topic();
             }

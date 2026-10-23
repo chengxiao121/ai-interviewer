@@ -1,4 +1,5 @@
 package com.xiao.aiagent.service;
+import com.xiao.aiagent.dto.PlanTopic;
 import com.xiao.aiagent.common.LlmJson;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -75,10 +76,6 @@ public class InterviewPlanService {
             输出格式示例：
             [{"topic":"线程池参数","priority":"高","difficulty":"进阶"},{"topic":"synchronized 与 Lock 的区别","priority":"中","difficulty":"基础"}]
             """;
-
-    /** 考点计划条目（词表的最小单元）。priority/difficulty 取值见 normalize* 的合法值域 */
-    public record PlanTopic(String topic, String priority, String difficulty) {
-    }
 
     private final ChatModel chatModel;
     private final MaterialProfileRepository materialProfileRepository;

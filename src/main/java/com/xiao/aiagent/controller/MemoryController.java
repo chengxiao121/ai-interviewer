@@ -1,5 +1,7 @@
 package com.xiao.aiagent.controller;
 
+import com.xiao.aiagent.dto.ChatMessageDto;
+import com.xiao.aiagent.dto.ClearResult;
 import com.xiao.aiagent.repository.InterviewSessionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,11 +77,6 @@ public class MemoryController {
         return chatMemoryRepository.findConversationIds();
     }
 
-    // 历史消息 DTO：不直接返回 Message，避免序列化出大量 metadata 噪音
-    public record ChatMessageDto(String role, String content) {
-    }
-
-    // 清空会话结果：cleared = 两步全部成功；memoryCleared / bindingCleared 分别暴露每步结果
-    public record ClearResult(String sessionId, boolean cleared, boolean memoryCleared, boolean bindingCleared) {
-    }
+    // 历史消息 DTO：不直接返回 Message，避免序列化出大量 metadata 噪音（已抽出至 dto.ChatMessageDto）
+    // 清空会话结果：cleared = 两步全部成功；memoryCleared / bindingCleared 分别暴露每步结果（已抽出至 dto.ClearResult）
 }

@@ -1,4 +1,5 @@
 package com.xiao.aiagent.controller;
+import com.xiao.aiagent.dto.ClearResult;
 
 import com.xiao.aiagent.repository.InterviewSessionRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,7 +47,7 @@ class MemoryControllerClearTest {
         @Test
         @DisplayName("两步都成功 → cleared=true 且两步结果各自为 true")
         void 两步都成功() {
-            MemoryController.ClearResult result = controller.clear(SESSION_ID);
+            ClearResult result = controller.clear(SESSION_ID);
 
             assertTrue(result.cleared());
             assertTrue(result.memoryCleared());
@@ -64,7 +65,7 @@ class MemoryControllerClearTest {
         void 绑定删除失败如实上报() {
             doThrow(new RuntimeException("pg down")).when(interviewSessionRepository).deleteBySessionId(SESSION_ID);
 
-            MemoryController.ClearResult result = controller.clear(SESSION_ID);
+            ClearResult result = controller.clear(SESSION_ID);
 
             assertFalse(result.cleared());
             assertTrue(result.memoryCleared());
@@ -76,7 +77,7 @@ class MemoryControllerClearTest {
         void 记忆清空失败仍尝试删绑定() {
             doThrow(new RuntimeException("redis down")).when(chatMemory).clear(SESSION_ID);
 
-            MemoryController.ClearResult result = controller.clear(SESSION_ID);
+            ClearResult result = controller.clear(SESSION_ID);
 
             assertFalse(result.cleared());
             assertFalse(result.memoryCleared());

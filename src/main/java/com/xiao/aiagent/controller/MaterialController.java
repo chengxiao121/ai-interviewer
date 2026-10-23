@@ -1,5 +1,7 @@
 package com.xiao.aiagent.controller;
 
+import com.xiao.aiagent.dto.MaterialMeta;
+import com.xiao.aiagent.dto.UploadResult;
 import com.xiao.aiagent.service.MaterialStoreService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -45,7 +47,7 @@ public class MaterialController {
      * @return {materialId, type, fileName, charCount, duplicated}——materialId 供聊天请求引用
      */
     @PostMapping(value = "/upload", consumes = MediaType.TEXT_PLAIN_VALUE)
-    public MaterialStoreService.UploadResult upload(@RequestParam(value = "type", required = false) String type,
+    public UploadResult upload(@RequestParam(value = "type", required = false) String type,
                                                     @RequestParam(value = "name", required = false) String name,
                                                     @RequestBody String content) {
         return materialStoreService.save(content, type, name);
@@ -56,7 +58,7 @@ public class MaterialController {
      * 按上传时间倒序。JD 不提供列表：JD 在入场时只走上传（弱依赖，不常复用）。
      */
     @GetMapping("/resumes")
-    public List<MaterialStoreService.MaterialMeta> listResumes() {
+    public List<MaterialMeta> listResumes() {
         return materialStoreService.listResumes();
     }
 

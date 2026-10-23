@@ -1,4 +1,5 @@
 package com.xiao.aiagent.service;
+import com.xiao.aiagent.dto.PlanTopic;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
@@ -19,10 +20,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 @DisplayName("resolveTopic：考点三级校验归一")
 class AnswerEvaluatorServiceResolveTopicTest {
 
-    /** 构造词表：与 InterviewPlanService.PlanTopic 对齐（topic, priority, difficulty） */
-    private static List<InterviewPlanService.PlanTopic> vocab(String... topics) {
+    /** 构造词表：与 PlanTopic 对齐（topic, priority, difficulty） */
+    private static List<PlanTopic> vocab(String... topics) {
         return java.util.Arrays.stream(topics)
-                .map(t -> new InterviewPlanService.PlanTopic(t, "P0", "中"))
+                .map(t -> new PlanTopic(t, "P0", "中"))
                 .toList();
     }
 
@@ -47,13 +48,13 @@ class AnswerEvaluatorServiceResolveTopicTest {
     class ExactMatch {
         @Test
         void 精确命中返回词表项() {
-            List<InterviewPlanService.PlanTopic> v = vocab("线程池", "JVM", "集合");
+            List<PlanTopic> v = vocab("线程池", "JVM", "集合");
             assertEquals("线程池", AnswerEvaluatorService.resolveTopic("线程池", v));
         }
 
         @Test
         void 首尾空白被trim后精确命中() {
-            List<InterviewPlanService.PlanTopic> v = vocab("线程池");
+            List<PlanTopic> v = vocab("线程池");
             assertEquals("线程池", AnswerEvaluatorService.resolveTopic(" 线程池 ", v));
         }
     }
@@ -63,21 +64,21 @@ class AnswerEvaluatorServiceResolveTopicTest {
     class ContainsMatch {
         @Test
         void LLM输出比词表项长_输出包含词表项() {
-            List<InterviewPlanService.PlanTopic> v = vocab("线程池参数");
+            List<PlanTopic> v = vocab("线程池参数");
             assertEquals("线程池参数",
                     AnswerEvaluatorService.resolveTopic("线程池参数的配置", v));
         }
 
         @Test
         void LLM输出比词表项短_词表项包含输出() {
-            List<InterviewPlanService.PlanTopic> v = vocab("Java 线程池");
+            List<PlanTopic> v = vocab("Java 线程池");
             assertEquals("Java 线程池",
                     AnswerEvaluatorService.resolveTopic("线程池", v));
         }
 
         @Test
         void 多项包含时按词表顺序取第一个() {
-            List<InterviewPlanService.PlanTopic> v = vocab("线程池", "线程池参数");
+            List<PlanTopic> v = vocab("线程池", "线程池参数");
             assertEquals("线程池",
                     AnswerEvaluatorService.resolveTopic("线程池参数配置", v));
         }
@@ -88,21 +89,21 @@ class AnswerEvaluatorServiceResolveTopicTest {
     class OutOfPlanFallback {
         @Test
         void 完全不匹配时加计划外前缀() {
-            List<InterviewPlanService.PlanTopic> v = vocab("线程池", "JVM");
+            List<PlanTopic> v = vocab("线程池", "JVM");
             assertEquals("计划外：TCP握手",
                     AnswerEvaluatorService.resolveTopic("TCP握手", v));
         }
 
         @Test
         void LLM自己已输出计划外时不重复加前缀() {
-            List<InterviewPlanService.PlanTopic> v = vocab("线程池");
+            List<PlanTopic> v = vocab("线程池");
             assertEquals("计划外",
                     AnswerEvaluatorService.resolveTopic("计划外", v));
         }
 
         @Test
         void 计划外超长截断到64字符() {
-            List<InterviewPlanService.PlanTopic> v = vocab("线程池");
+            List<PlanTopic> v = vocab("线程池");
             String result = AnswerEvaluatorService.resolveTopic("长".repeat(100), v);
             assertEquals(64, result.length());
             assertTrue(result.startsWith("计划外"));
