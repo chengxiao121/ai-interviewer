@@ -2,7 +2,7 @@ package com.xiao.aiagent.controller;
 
 import com.xiao.aiagent.entity.InterviewSession;
 import com.xiao.aiagent.repository.InterviewSessionRepository;
-import com.xiao.aiagent.services.MaterialStoreService;
+import com.xiao.aiagent.service.MaterialStoreService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

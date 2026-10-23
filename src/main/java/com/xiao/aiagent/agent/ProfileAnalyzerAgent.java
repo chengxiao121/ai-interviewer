@@ -1,4 +1,4 @@
-package com.xiao.aiagent.services;
+package com.xiao.aiagent.agent;
 
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.agent.Builder;

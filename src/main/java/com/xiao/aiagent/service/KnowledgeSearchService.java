@@ -1,4 +1,4 @@
-package com.xiao.aiagent.services;
+package com.xiao.aiagent.service;
 
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;

@@ -1,4 +1,4 @@
-package com.xiao.aiagent.services;
+package com.xiao.aiagent.common;
 
 /**
  * LLM 结构化输出提取工具（阶段 5.2 新增）——"带 LLM 的普通函数"三兄弟（规划/评估/报告）共用。
@@ -12,7 +12,7 @@ package com.xiao.aiagent.services;
  * 与"LLM 消费传原文、代码消费才解析"判据的关系：规划/评估/报告的输出都要被代码
  * 程序化处理（校验/落库/join），属于"代码消费"侧，所以必须解析——本类是解析前的清洗。
  */
-final class LlmJson {
+public final class LlmJson {
 
     private LlmJson() {
     }
@@ -21,7 +21,7 @@ final class LlmJson {
      * 从 LLM 输出中提取 JSON 文本（对象或数组）。
      * 提取不到结构时原样返回（让上层 Jackson 报错走重试/降级，不在这里吞异常）。
      */
-    static String extract(String text) {
+    public static String extract(String text) {
         if (text == null) {
             return "";
         }

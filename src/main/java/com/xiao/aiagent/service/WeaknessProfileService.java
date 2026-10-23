@@ -1,4 +1,4 @@
-package com.xiao.aiagent.services;
+package com.xiao.aiagent.service;
 
 import com.xiao.aiagent.repository.ScoreRecordRepository;
 import org.slf4j.Logger;

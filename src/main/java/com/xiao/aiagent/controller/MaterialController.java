@@ -1,6 +1,6 @@
 package com.xiao.aiagent.controller;
 
-import com.xiao.aiagent.services.MaterialStoreService;
+import com.xiao.aiagent.service.MaterialStoreService;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;

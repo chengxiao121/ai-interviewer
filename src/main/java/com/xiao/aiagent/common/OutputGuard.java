@@ -1,4 +1,4 @@
-package com.xiao.aiagent.services;
+package com.xiao.aiagent.common;
 
 /**
  * 输出守卫（输出纪律优化 阶段 4 新增）——面试官回复的出口兜底，挂在流式转发前端这一环。
@@ -19,7 +19,7 @@ package com.xiao.aiagent.services;
  *
  * 纯函数（同包直测，不起 Spring）：feed 逐块喂入，返回该块中可安全转发/截断的位置。
  */
-final class OutputGuard {
+public final class OutputGuard {
 
     /** 敏感标记词表（§9.2 初值）。判定为标题行级，防止题目正文误伤。 */
     static final java.util.List<String> MARKER_WORDS = java.util.List.of(
@@ -33,18 +33,18 @@ final class OutputGuard {
     private static final String HEAD_PREFIXES = "#*【- ";
 
     /** 守卫模式。 */
-    enum Mode { LOG, TRUNCATE, OFF }
+    public enum Mode { LOG, TRUNCATE, OFF }
 
     private Mode mode;
     private final StringBuilder buffer = new StringBuilder();
     /** 累计命中次数（log 模式观测命中率用）。 */
     private int hitCount = 0;
 
-    OutputGuard(Mode mode) {
+    public OutputGuard(Mode mode) {
         this.mode = mode;
     }
 
-    int hitCount() {
+    public int hitCount() {
         return hitCount;
     }
 
@@ -55,7 +55,7 @@ final class OutputGuard {
      * log 模式：整块原样返回（只记录命中，不干预流）。
      * truncate 模式：返回命中位置之前的可转发前缀；一旦命中，后续调用一律返回 null（已截断）。
      */
-    String feed(String chunk) {
+    public String feed(String chunk) {
         if (chunk == null || chunk.isEmpty()) {
             return chunk;
         }
@@ -94,7 +94,7 @@ final class OutputGuard {
     }
 
     /** 是否已进入"截断后"状态（truncate 命中过）。 */
-    boolean isTruncated() {
+    public boolean isTruncated() {
         return mode == Mode.TRUNCATE && hitCount > 0;
     }
 

@@ -1,4 +1,4 @@
-package com.xiao.aiagent.services;
+package com.xiao.aiagent.common;
 
 import com.alibaba.cloud.ai.graph.NodeOutput;
 import com.alibaba.cloud.ai.graph.streaming.OutputType;
@@ -35,7 +35,7 @@ import reactor.core.publisher.Flux;
  *
  * 包私有纯函数：不依赖 Spring 上下文，同包直测（项目测试约定）。
  */
-final class InterviewerStreamFilter {
+public final class InterviewerStreamFilter {
 
     private InterviewerStreamFilter() {
     }
@@ -46,7 +46,7 @@ final class InterviewerStreamFilter {
      * @param stream 编排图 stream() 的原始输出（含所有子 Agent 的事件）
      * @return 只有面试官模型输出的 Flux<Message>，语义与 Agent.streamMessages 对齐
      */
-    static Flux<Message> interviewerOnly(Flux<NodeOutput> stream) {
+    public static Flux<Message> interviewerOnly(Flux<NodeOutput> stream) {
         return stream
                 .ofType(StreamingOutput.class)
                 .filter(so -> isForwardableType(so.getOutputType()))

@@ -1,7 +1,7 @@
 package com.xiao.aiagent.controller;
 
 import com.xiao.aiagent.repository.KnowledgeDocumentRepository;
-import com.xiao.aiagent.services.KnowledgeBaseService;
+import com.xiao.aiagent.service.KnowledgeBaseService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

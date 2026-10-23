@@ -1,5 +1,6 @@
-package com.xiao.aiagent.services;
+package com.xiao.aiagent.service;
 
+import com.xiao.aiagent.agent.MaterialInterviewPipeline;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

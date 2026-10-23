@@ -1,4 +1,5 @@
 package com.xiao.aiagent.config;
+import com.xiao.aiagent.agent.InterviewAssistant;
 
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.alibaba.cloud.ai.memory.redis.JedisRedisChatMemoryRepository;

@@ -1,4 +1,4 @@
-package com.xiao.aiagent.services;
+package com.xiao.aiagent.common;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -27,7 +27,7 @@ import org.slf4j.LoggerFactory;
  *   sanitize(不含敏感键 JSON) → 原样返回（零改动，不重新序列化，避免无谓的格式抖动）
  *   sanitize(非法 JSON/null)  → 原样返回 + warn
  */
-final class MaterialSanitizer {
+public final class MaterialSanitizer {
 
     private static final Logger log = LoggerFactory.getLogger(MaterialSanitizer.class);
 
@@ -44,7 +44,7 @@ final class MaterialSanitizer {
      * 树里没有任何敏感键时返回原字符串（保持原格式，不做等价重序列化）；
      * 解析失败原样返回（降级哲学，warn 但不抛）。
      */
-    static String sanitize(String factsJson) {
+    public static String sanitize(String factsJson) {
         if (factsJson == null || factsJson.isBlank()) {
             return factsJson;
         }

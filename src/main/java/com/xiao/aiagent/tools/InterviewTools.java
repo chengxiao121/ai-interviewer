@@ -3,7 +3,7 @@ package com.xiao.aiagent.tools;
 import com.xiao.aiagent.entity.MaterialProfile;
 import com.xiao.aiagent.repository.MaterialProfileRepository;
 import com.xiao.aiagent.repository.ScoreRecordRepository;
-import com.xiao.aiagent.services.WeaknessProfileService;
+import com.xiao.aiagent.service.WeaknessProfileService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.model.ToolContext;

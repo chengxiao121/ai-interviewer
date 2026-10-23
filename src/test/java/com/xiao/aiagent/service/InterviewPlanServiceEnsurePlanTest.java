@@ -1,4 +1,4 @@
-package com.xiao.aiagent.services;
+package com.xiao.aiagent.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.xiao.aiagent.entity.InterviewPlan;

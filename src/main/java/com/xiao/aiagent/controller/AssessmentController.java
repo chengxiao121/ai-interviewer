@@ -1,6 +1,6 @@
 package com.xiao.aiagent.controller;
 
-import com.xiao.aiagent.services.AssessmentReportService;
+import com.xiao.aiagent.service.AssessmentReportService;
 import com.xiao.aiagent.tools.SessionKeys;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;

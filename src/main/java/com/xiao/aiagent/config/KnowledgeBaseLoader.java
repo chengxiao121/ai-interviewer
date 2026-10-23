@@ -1,5 +1,5 @@
 package com.xiao.aiagent.config;
-import com.xiao.aiagent.services.KnowledgeBaseService;
+import com.xiao.aiagent.service.KnowledgeBaseService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

@@ -1,4 +1,4 @@
-package com.xiao.aiagent.services;
+package com.xiao.aiagent.common;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;

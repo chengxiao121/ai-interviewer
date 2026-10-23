@@ -1,4 +1,4 @@
-package com.xiao.aiagent.services;
+package com.xiao.aiagent.service;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;

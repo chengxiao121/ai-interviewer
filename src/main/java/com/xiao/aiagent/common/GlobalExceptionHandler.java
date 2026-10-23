@@ -1,4 +1,6 @@
 package com.xiao.aiagent.common;
+import com.xiao.aiagent.service.MaterialStoreService;
+import com.xiao.aiagent.agent.MaterialInterviewPipeline;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

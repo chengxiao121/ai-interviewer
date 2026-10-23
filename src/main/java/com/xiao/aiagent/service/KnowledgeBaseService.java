@@ -1,4 +1,4 @@
-package com.xiao.aiagent.services;
+package com.xiao.aiagent.service;
 
 import com.xiao.aiagent.entity.KnowledgeDocStatus;
 import com.xiao.aiagent.entity.KnowledgeDocument;

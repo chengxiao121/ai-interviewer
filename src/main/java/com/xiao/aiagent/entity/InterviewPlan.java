@@ -1,4 +1,5 @@
 package com.xiao.aiagent.entity;
+import com.xiao.aiagent.service.InterviewPlanService;
 import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
