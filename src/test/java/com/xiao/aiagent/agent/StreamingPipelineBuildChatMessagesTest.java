@@ -33,8 +33,11 @@ import static org.mockito.Mockito.when;
  *
  * 基类是抽象类且装配逻辑是 protected——用匿名子类实例化（依赖全 mock）直测，
  * 锁定两分支：
- * ① 已结束 → 注入 FINISHED_PROMPT，跳过 ensurePlan/evaluateTurn（不出题不评分），RAG 照常；
+ * ① 已结束 → 注入 FINISHED_PROMPT，跳过 ensurePlan/evaluateTurn（不出题不评分）；
  * ② 进行中 → 无 FINISHED_PROMPT，计划与评估照常注入（原行为不变）。
+ *
+ * 阶段 12 追加：两种状态都【不得】再调用题库 RAG 检索（检索 query 与"下一题问什么"错配，
+ * 已整体断开），用 verify(never()) 锁住，防止后续误接回。
  */
 @DisplayName("buildChatMessages：已结束面试注入不出题提示并跳过计划/评估")
 class StreamingPipelineBuildChatMessagesTest {
@@ -74,9 +77,10 @@ class StreamingPipelineBuildChatMessagesTest {
         support = newSupport(chatMemory, knowledgeSearchService, weaknessProfileService,
                 interviewPlanService, answerEvaluatorService, lifecycleService);
 
-        // 公共桩：薄弱点为空（不注入）、RAG 命中、评估注入为空（不干扰断言）、记忆窗口为空
+        // 公共桩：薄弱点为空（不注入）、评估注入为空（不干扰断言）、记忆窗口为空。
+        // 注意：不再给 RAG 打桩——阶段 12 起装配链路不调用它（mock 默认返回 null，
+        // 若代码误接回会在拼接处炸 NPE，比"打了桩静默通过"更容易暴露回归）
         when(weaknessProfileService.loadProfile(anyString())).thenReturn("");
-        when(knowledgeSearchService.search(anyString())).thenReturn("【题库参考】并发基础知识");
         when(answerEvaluatorService.evaluateTurn(anyString(), anyString(), anyString(), any()))
                 .thenReturn(new AnswerEvaluatorService.EvaluationOutcome(false, ""));
         when(chatMemory.get(anyString())).thenReturn(List.of());
@@ -98,7 +102,7 @@ class StreamingPipelineBuildChatMessagesTest {
     class 已结束 {
 
         @Test
-        @DisplayName("注入不出题提示；跳过计划生成与评估；题库 RAG 照常（答疑要用）")
+        @DisplayName("注入不出题提示；跳过计划生成与评估；不调用题库 RAG（阶段 12 已断开）")
         void 注入结束提示并跳过出题链路() {
             when(lifecycleService.isFinished(SESSION_ID)).thenReturn(true);
 
@@ -109,7 +113,7 @@ class StreamingPipelineBuildChatMessagesTest {
             verify(interviewPlanService, never()).ensurePlan(anyString(), anyString(), anyString());
             verify(answerEvaluatorService, never())
                     .evaluateTurn(anyString(), anyString(), anyString(), any());
-            verify(knowledgeSearchService).search("什么是线程池？"); // 答疑仍可用题库
+            verify(knowledgeSearchService, never()).search(anyString()); // 阶段 12：RAG 已断开
             assertTrue(messages.get(messages.size() - 1) instanceof UserMessage, "本轮消息仍在末位");
         }
     }
@@ -119,7 +123,7 @@ class StreamingPipelineBuildChatMessagesTest {
     class 进行中 {
 
         @Test
-        @DisplayName("不注入结束提示；计划与评估照常执行（原行为不变）")
+        @DisplayName("不注入结束提示；计划与评估照常执行，且不调用题库 RAG（阶段 12 已断开）")
         void 原行为不变() {
             when(lifecycleService.isFinished(SESSION_ID)).thenReturn(false);
             InterviewPlan plan = new InterviewPlan();
@@ -132,6 +136,7 @@ class StreamingPipelineBuildChatMessagesTest {
             assertFalse(system.contains("本场面试已经结束"));
             assertTrue(system.contains("【面试计划】"), "进行中的会话计划照常注入");
             verify(answerEvaluatorService).evaluateTurn(anyString(), anyString(), anyString(), any());
+            verify(knowledgeSearchService, never()).search(anyString()); // 阶段 12：RAG 已断开
         }
     }
 }

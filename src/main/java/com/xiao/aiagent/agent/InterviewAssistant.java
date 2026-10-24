@@ -40,7 +40,7 @@ import java.util.List;
  * 2. 那本"记录本"就是图状态，最关键的一个键叫 messages（整场对话的消息）。
  * 3. 记录本按 threadId 区分是哪场面试（threadId = 我们的 sessionId）。
  * 4. ReactAgent 不再使用 ChatClient 的 advisor（记忆顾问/RAG顾问都没了），
- *    所以"抄历史、检索题库、存回窗口"这些原本自动的活，全部在这里手动做。
+ *    所以"抄历史、存回窗口"这些原本自动的活，全部在这里手动做。
  * ─────────────────────────────────────────────────────────
  */
 @Service
@@ -50,7 +50,9 @@ public class InterviewAssistant extends StreamingPipelineSupport {
      * 系统提示（纯静态，不含运行时变量）。
      * sessionId 不进系统提示：打分落库时的会话归属由服务端通过 RunnableConfig.threadId 注入，
      * 模型无需知道会话 id。
-     * 题库知识不再由 QuestionAnswerAdvisor 注入，改为 chat() 里前置检索后以 system 消息给出。
+     * 题库知识经历过三次装配方式：QuestionAnswerAdvisor 自动注入 → chat()/基类前置检索后
+     * 以 system 消息注入 → 【阶段 12：不再注入】（检索 query 拿的是候选人答案，与"下一题
+     * 问什么"错配，详见 StreamingPipelineSupport 类注释）。出题素材改为面试计划与资料画像。
      */
     private static final String SYSTEM_PROMPT = """
             你是一位资深技术面试官，负责对求职者进行技术面试模拟。
@@ -60,8 +62,8 @@ public class InterviewAssistant extends StreamingPipelineSupport {
             3. 针对回答进行点评并给出改进建议；评分已由系统评估环节独立完成——若上下文带【上一题评估】，
                按其中的点评内容【定性】转述（如"答得比较扎实"/"还有明显缺口"），不要另行自打分数，
                更不要向求职者报出任何数字评分（如 8.5/10）；并按其"下题建议"调整本题的难度与方向；
-            4. 出题时优先参考知识库中的题库内容；题库内容只作为出题素材，不要在回答中提及题库、
-               出处、来源等信息（也不要编造出处）。
+            4. 出题素材以系统消息注入的上下文为准（面试计划 / 资料画像 / 本场卷子）；
+               这些素材只作为出题依据，不要在回答中提及题库、出处、来源等信息（也不要编造出处）。
             5. 求职者询问答题统计或薄弱考点时，调用 questionStats 工具查询后如实转述结果。
             6. 求职者分享某个 URL（文章、技术文档等）让你参考时，使用 fetch 工具读取该网页内容，
                基于文章内容出题，弥补题库可能没有覆盖的主题。
@@ -222,8 +224,9 @@ public class InterviewAssistant extends StreamingPipelineSupport {
     public Flux<String> chat(String userMessage, String sessionId, String candidateId) {
 
         // ── 第 1 步：组装上下文（P2-7 收口第二步：复用基类公共装配）──
-        // 基类装配 = 薄弱点回顾 → 面试计划(含 ensurePlan) → 【本类钩子：代码事实清单】→ 题库 RAG
-        //            → 上一题评估(含 evaluateTurn) → 窗口历史 → 本轮消息；
+        // 基类装配 = 薄弱点回顾 → 面试计划(含 ensurePlan) → 【本类钩子：代码事实清单】
+        //            → 上一题评估(含 evaluateTurn) → 窗口历史 → 本轮消息
+        //            （"题库 RAG"一步已于阶段 12 移除）；
         // ensurePlan/evaluateTurn 都在基类装配里执行，评估必须在出题之前的时序由装配顺序保证。
         // 直连快路径独有的 codeFacts 前置注入经 extraContext 钩子保留（见下方覆写）。
         List<Message> messages = buildChatMessages(userMessage, sessionId, candidateId);
@@ -290,7 +293,7 @@ public class InterviewAssistant extends StreamingPipelineSupport {
     private String loadCodeFacts(String sessionId) {
         List<MaterialProfile> profiles = materialProfileRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
         if (profiles == null || profiles.isEmpty()) {
-            // 该会话没有代码分析记录 → 不是代码评审面试，正常走题库出题
+            // 该会话没有代码分析记录 → 不是代码评审面试，正常按上下文（计划/画像）出题
             return "";
         }
 

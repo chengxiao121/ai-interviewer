@@ -10,6 +10,12 @@ import java.util.List;
 /**
  * 题库知识检索组件（阶段 4.2 重构，Rule of Three 触发点）。
  *
+ * ⚠️ 阶段 12 起【已无调用方，待阶段 7 清理】：buildChatMessages 中的每轮检索注入已断开
+ * （检索 query 拿的是候选人的答案，与"下一题问什么"错配，属噪音大于信号）。
+ * 类保留的原因：它被 StreamingPipelineSupport 构造签名持有，删除要连带改三个子类的
+ * super(...)；且 RAG 是简历项目 2 的技术标签、将来可用于"从教材生成题目"的片段检索。
+ * 阶段 7 将统一决定删除或接回，在此之前本类不参与任何在线链路。
+ *
  * 为什么抽它：题库 RAG 前置检索的同一段代码（similaritySearch → topK=3 → 门槛 0.7 → 拼 system 文本）
  * 在四个类里各复制了一遍（InterviewAssistant / CodeReviewPipeline / AgentRouter / CombinedInterviewPipeline）。
  * 出现第四次复制时就是抽公共组件的信号——"三次重复忍、四次不重复忍"，

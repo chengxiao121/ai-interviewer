@@ -38,9 +38,17 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * 基类提供：
  *   1. buildChatMessages(userMessage, sessionId)：组装"通用上下文"
- *      （题库知识 RAG → SystemMessage + 窗口历史 + 用户消息）；
+ *      （薄弱点回顾 / 会话状态 / 面试计划 / 扩展点 / 会话内评估 → SystemMessage
+ *       + 窗口历史 + 用户消息）；
  *   2. streamAssistantAnswers(agentStream, userMessage, config)：过滤 + 累加 + 收尾；
- *   3. 持有 chatMemory / memorySaver / knowledgeSearchService 三个公共依赖。
+ *   3. 持有 chatMemory / memorySaver / knowledgeSearchService 等公共依赖。
+ *
+ * 阶段 12 变更（决策 6）：buildChatMessages 不再注入题库 RAG 检索结果。
+ *   原因：资料模式的出题素材已有更可靠的来源（JD 画像、简历/代码物料、面试计划），
+ *   而拿候选人的【答案】当检索词去捞下一题素材属于检索错配——答"Redis 持久化"，
+ *   捞回来的还是持久化内容，题目被钉死在同一处，噪音大于信号。
+ *   知识库模式（阶段 3~5）改走"入场组卷"，面试中同样不做 RAG。
+ *   KnowledgeSearchService 自此无调用方，代码保留至阶段 7 再决定删除或接回。
  *
  * 为什么不把"开跑"（streamMessages）也收进来？
  *   三个子类各自持有不同的编排 Agent（router / pipeline），且各自想打不同的启动
@@ -57,6 +65,11 @@ public abstract class StreamingPipelineSupport {
 
     protected final ChatMemory chatMemory;
     protected final MemorySaver memorySaver;
+    /**
+     * 题库向量检索（阶段 12 起已无调用方，待阶段 7 清理）。
+     * 仅因构造函数签名被三个子类共用而保留持有，不删除以免牵动 AgentRouter /
+     * InterviewAssistant / MaterialInterviewPipeline 的 super(...) 调用。
+     */
     protected final KnowledgeSearchService knowledgeSearchService;
     /** 跨会话薄弱点回顾（4.3 新增）：开场注入候选人的历史薄弱点摘要 */
     protected final WeaknessProfileService weaknessProfileService;
@@ -101,9 +114,12 @@ public abstract class StreamingPipelineSupport {
      *      - 已结束 → 注入 FINISHED_PROMPT（不出题不评分），跳过计划与评估（它们的职责
      *        是"驱动面试"，结束后继续跑只会白生成计划、误判作答）；
      *      - 进行中 → 面试计划（5.2）+ 会话内评估（5.3），原行为不变；
-     *   ③ 题库知识（RAG）两种状态都注入——结束后答疑同样受益于题库检索；
+     *   ③ 扩展点钩子（子类自有上下文，如直连路径的代码事实清单）；
      *   ④ 短期窗口历史 → 平铺进消息列表（最近 maxMessages 条）；
      *   ⑤ 用户本轮消息。
+     *
+     * 已移除项（阶段 12）：原第 ③ 步"题库知识 RAG 检索"不再注入——检索 query 拿的是
+     * 候选人的答案，与"下一题该问什么"错配，详见类注释"阶段 12 变更"。
      */
     protected List<Message> buildChatMessages(String userMessage, String sessionId, String candidateId) {
         List<Message> messages = new ArrayList<>();
@@ -140,12 +156,6 @@ public abstract class StreamingPipelineSupport {
             messages.add(new SystemMessage(extraContext));
         }
 
-        // ② 题库知识
-        String knowledgeContext = knowledgeSearchService.search(userMessage);
-        if (!knowledgeContext.isBlank()) {
-            messages.add(new SystemMessage(knowledgeContext));
-        }
-
         // ②b 会话内评估（阶段 5.3 验收修复）：评估"上一问 + 本轮消息"。仅进行中的面试执行——
         // 已结束的会话不再产生新作答，评估（含落库）跳过（见上方状态分叉注释）。
         // 为什么挂在这条公共装配点上：面试官在两条编排路径（语义路由 / 资料流水线）里都是
@@ -169,8 +179,9 @@ public abstract class StreamingPipelineSupport {
 
     /**
      * 上下文装配扩展点（P2-7 收口新增）：子类需要注入基类未覆盖的上下文时覆写，默认空串不注入。
-     * 钩子位置：薄弱点回顾/面试计划之后、题库 RAG 之前——与收口前 InterviewAssistant.chat()
-     * 手写装配的注入顺序一致（薄弱点 → 计划 → 代码清单 → RAG → 评估），收口不改顺序。
+     * 钩子位置：薄弱点回顾/面试计划之后、会话内评估之前——与收口前 InterviewAssistant.chat()
+     * 手写装配的注入顺序一致（薄弱点 → 计划 → 代码清单 → 评估），收口不改顺序。
+     * （原顺序里的"RAG"一步已于阶段 12 移除，见类注释。）
      */
     protected String extraContext(String userMessage, String sessionId) {
         return "";
