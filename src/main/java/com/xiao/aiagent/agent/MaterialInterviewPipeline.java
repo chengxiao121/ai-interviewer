@@ -4,7 +4,6 @@ import com.xiao.aiagent.service.InterviewLifecycleService;
 import com.xiao.aiagent.service.MaterialStoreService;
 import com.xiao.aiagent.common.OutputGuard;
 import com.xiao.aiagent.common.InterviewerStreamFilter;
-import com.xiao.aiagent.service.KnowledgeSearchService;
 import com.xiao.aiagent.service.AnswerEvaluatorService;
 import com.xiao.aiagent.service.WeaknessProfileService;
 
@@ -114,14 +113,13 @@ public class MaterialInterviewPipeline extends StreamingPipelineSupport {
                                      MaterialProfileRepository materialProfileRepository,
                                      ChatMemory chatMemory,
                                      MemorySaver memorySaver,
-                                     KnowledgeSearchService knowledgeSearchService,
                                      WeaknessProfileService weaknessProfileService,
                                      InterviewPlanService interviewPlanService,
                                      AnswerEvaluatorService answerEvaluatorService,
                                      InterviewLifecycleService interviewLifecycleService,
                                      @Value("${app.interview.output-guard.mode:log}") String outputGuardMode) {
 
-        super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService,
+        super(chatMemory, memorySaver, weaknessProfileService,
                 interviewPlanService, answerEvaluatorService, interviewLifecycleService,
                 OutputGuard.Mode.valueOf(outputGuardMode.trim().toUpperCase()));
 

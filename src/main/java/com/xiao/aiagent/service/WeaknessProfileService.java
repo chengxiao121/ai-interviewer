@@ -17,7 +17,7 @@ import java.util.List;
  *     ② 开场注入（系统消息，见 StreamingPipelineSupport / InterviewAssistant）。
  *   两处若各写一遍"聚合 + 格式化"，口径容易漂移（一处改一处不改）；
  *   收敛到本类后：工具返回的文本 = 注入的 system 文本 = 同一段话，单一事实来源。
- *   与 KnowledgeSearchService（题库检索文本唯一数据源）是同一套"物料装配"模式。
+ *   与基类 StreamingPipelineSupport 的上下文装配是同一套"物料装配"模式。
  */
 @Service
 public class WeaknessProfileService {

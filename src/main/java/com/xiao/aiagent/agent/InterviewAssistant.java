@@ -2,7 +2,6 @@ package com.xiao.aiagent.agent;
 import com.xiao.aiagent.service.InterviewPlanService;
 import com.xiao.aiagent.service.InterviewLifecycleService;
 import com.xiao.aiagent.common.OutputGuard;
-import com.xiao.aiagent.service.KnowledgeSearchService;
 import com.xiao.aiagent.common.MaterialSanitizer;
 import com.xiao.aiagent.service.AnswerEvaluatorService;
 import com.xiao.aiagent.service.WeaknessProfileService;
@@ -143,13 +142,12 @@ public class InterviewAssistant extends StreamingPipelineSupport {
     private final ReactAgent agent;
     // 代码事实清单仓储（阶段 4.1 新增）：双 Agent 流水线里，分析 Agent 把清单落这表，
     // 面试官从这里按 sessionId 取清单出题。这就是 Agent 间"落库传递数据契约"的读取端
-    // （chatMemory/memorySaver/RAG/薄弱点/计划/评估等公共依赖由基类 StreamingPipelineSupport 持有）
+    // （chatMemory/memorySaver/薄弱点/计划/评估等公共依赖由基类 StreamingPipelineSupport 持有）
     private final MaterialProfileRepository materialProfileRepository;
 
     public InterviewAssistant(ChatModel chatModel,
                               InterviewTools interviewTools,
                               ObjectProvider<ToolCallbackProvider> mcpToolCallbackProvider,
-                              KnowledgeSearchService knowledgeSearchService,
                               ChatMemory chatMemory,
                               MemorySaver memorySaver,
                               MaterialProfileRepository materialProfileRepository,
@@ -159,8 +157,8 @@ public class InterviewAssistant extends StreamingPipelineSupport {
                               InterviewLifecycleService interviewLifecycleService,
                               @Value("${app.interview.output-guard.mode:log}") String outputGuardMode) {
 
-        // 公共依赖（记忆/存档器/RAG/薄弱点/计划/评估/生命周期/守卫模式）交给基类持有（P2-7 收口第一步）
-        super(chatMemory, memorySaver, knowledgeSearchService,
+        // 公共依赖（记忆/存档器/薄弱点/计划/评估/生命周期/守卫模式）交给基类持有（P2-7 收口第一步）
+        super(chatMemory, memorySaver,
                 weaknessProfileService, interviewPlanService, answerEvaluatorService,
                 interviewLifecycleService,
                 OutputGuard.Mode.valueOf(outputGuardMode.trim().toUpperCase()));

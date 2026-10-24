@@ -2,7 +2,6 @@ package com.xiao.aiagent.agent;
 import com.xiao.aiagent.service.InterviewPlanService;
 import com.xiao.aiagent.service.InterviewLifecycleService;
 import com.xiao.aiagent.common.OutputGuard;
-import com.xiao.aiagent.service.KnowledgeSearchService;
 import com.xiao.aiagent.service.AnswerEvaluatorService;
 import com.xiao.aiagent.service.WeaknessProfileService;
 
@@ -31,7 +30,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * 都有一份结构相同的模板代码（约 30 行 × 3 处）：
  *   组装"通用上下文" → 开跑编排图 → 过滤成助手消息 → 累加完整回答 → 收尾
  *   （写回短期窗口 + 释放 checkpoint）。
- * 前两轮 Rule of Three（ProfileAnalyzerAgent / KnowledgeSearchService）已消掉部分重复，
+ * 前两轮 Rule of Three（ProfileAnalyzerAgent 等）已消掉部分重复，
  * 这一轮把"组装上下文 + 过滤收尾"收进本基类；P2-7 收口后 InterviewAssistant（直连快路径）
  * 也加入继承——四条入口路径共用同一份装配与收尾，子类各自只保留
  * 「自己的编排 Agent + 自己的快路径/复用路径 + 自己的 streamMessages 调用与启动失败日志」，
@@ -39,17 +38,19 @@ import java.util.concurrent.atomic.AtomicReference;
  *
  * 基类提供：
  *   1. buildChatMessages(userMessage, sessionId)：组装"通用上下文"
- *      （薄弱点回顾 / 会话状态 / 面试计划 / 扩展点 / 会话内评估 → SystemMessage
+ *      （薄弱点回顾 / 会话状态 / 面试计划或卷子 / 扩展点 / 会话内评估 → SystemMessage
  *       + 窗口历史 + 用户消息）；
  *   2. streamAssistantAnswers(agentStream, userMessage, config)：过滤 + 累加 + 收尾；
- *   3. 持有 chatMemory / memorySaver / knowledgeSearchService 等公共依赖。
+ *   3. 持有 chatMemory / memorySaver 等公共依赖。
  *
  * 阶段 12 变更（决策 6）：buildChatMessages 不再注入题库 RAG 检索结果。
  *   原因：资料模式的出题素材已有更可靠的来源（JD 画像、简历/代码物料、面试计划），
  *   而拿候选人的【答案】当检索词去捞下一题素材属于检索错配——答"Redis 持久化"，
  *   捞回来的还是持久化内容，题目被钉死在同一处，噪音大于信号。
  *   知识库模式（阶段 3~5）改走"入场组卷"，面试中同样不做 RAG。
- *   KnowledgeSearchService 自此无调用方，代码保留至阶段 7 再决定删除或接回。
+ *   阶段 7 已将整条向量链路（KnowledgeSearchService / 向量分块入库 / 启动扫描 /
+ *   Redis 向量索引）删除——若将来做"从教材生成题目"的片段检索，再按参考项目的
+ *   离线加工位置重新引入，而不是回到"面试中每轮注入"。
  *
  * 为什么不把"开跑"（streamMessages）也收进来？
  *   三个子类各自持有不同的编排 Agent（router / pipeline），且各自想打不同的启动
@@ -66,12 +67,6 @@ public abstract class StreamingPipelineSupport {
 
     protected final ChatMemory chatMemory;
     protected final MemorySaver memorySaver;
-    /**
-     * 题库向量检索（阶段 12 起已无调用方，待阶段 7 清理）。
-     * 仅因构造函数签名被三个子类共用而保留持有，不删除以免牵动 AgentRouter /
-     * InterviewAssistant / MaterialInterviewPipeline 的 super(...) 调用。
-     */
-    protected final KnowledgeSearchService knowledgeSearchService;
     /** 跨会话薄弱点回顾（4.3 新增）：开场注入候选人的历史薄弱点摘要 */
     protected final WeaknessProfileService weaknessProfileService;
     /** 面试计划（阶段 5.2 新增）："考什么"的范围契约，buildChatMessages 每轮注入 */
@@ -104,7 +99,6 @@ public abstract class StreamingPipelineSupport {
 
     protected StreamingPipelineSupport(ChatMemory chatMemory,
                                        MemorySaver memorySaver,
-                                       KnowledgeSearchService knowledgeSearchService,
                                        WeaknessProfileService weaknessProfileService,
                                        InterviewPlanService interviewPlanService,
                                        AnswerEvaluatorService answerEvaluatorService,
@@ -112,7 +106,6 @@ public abstract class StreamingPipelineSupport {
                                        OutputGuard.Mode outputGuardMode) {
         this.chatMemory = chatMemory;
         this.memorySaver = memorySaver;
-        this.knowledgeSearchService = knowledgeSearchService;
         this.weaknessProfileService = weaknessProfileService;
         this.interviewPlanService = interviewPlanService;
         this.answerEvaluatorService = answerEvaluatorService;

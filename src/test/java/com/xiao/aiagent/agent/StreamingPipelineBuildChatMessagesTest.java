@@ -6,7 +6,6 @@ import com.xiao.aiagent.entity.InterviewSession;
 import com.xiao.aiagent.service.AnswerEvaluatorService;
 import com.xiao.aiagent.service.InterviewLifecycleService;
 import com.xiao.aiagent.service.InterviewPlanService;
-import com.xiao.aiagent.service.KnowledgeSearchService;
 import com.xiao.aiagent.service.WeaknessProfileService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -41,7 +40,7 @@ import static org.mockito.Mockito.when;
  *    绝不调 ensurePlan（知识库面试靠卷子，不靠 LLM 现生成计划）；
  * ③ 进行中 + 资料模式 → 计划照常（原行为不变）；
  * ④ 未入场的会话（无绑定）→ 按资料模式处理（老行为兼容）。
- * 另锁：任何分支都不得再调用题库 RAG（阶段 12 已断开）。
+ * 题库 RAG 已在阶段 7 整体删除（知识库面试靠入场组卷），装配链路不再有任何向量检索依赖。
  */
 @DisplayName("buildChatMessages：状态/模式分叉（结束提示 / 卷子注入 / 计划注入）")
 class StreamingPipelineBuildChatMessagesTest {
@@ -50,7 +49,6 @@ class StreamingPipelineBuildChatMessagesTest {
     private static final String CANDIDATE_ID = "c1";
 
     private ChatMemory chatMemory;
-    private KnowledgeSearchService knowledgeSearchService;
     private WeaknessProfileService weaknessProfileService;
     private InterviewPlanService interviewPlanService;
     private AnswerEvaluatorService answerEvaluatorService;
@@ -59,13 +57,12 @@ class StreamingPipelineBuildChatMessagesTest {
 
     /** 匿名子类：基类抽象但无其他抽象方法，最小实现即可直测装配逻辑 */
     private static StreamingPipelineSupport newSupport(ChatMemory chatMemory,
-                                                       KnowledgeSearchService rag,
                                                        WeaknessProfileService weakness,
                                                        InterviewPlanService planService,
                                                        AnswerEvaluatorService evaluator,
                                                        InterviewLifecycleService lifecycle) {
         return new StreamingPipelineSupport(
-                chatMemory, null, rag, weakness, planService, evaluator,
+                chatMemory, null, weakness, planService, evaluator,
                 lifecycle, OutputGuard.Mode.OFF) {
         };
     }
@@ -81,17 +78,14 @@ class StreamingPipelineBuildChatMessagesTest {
     @BeforeEach
     void setUp() {
         chatMemory = Mockito.mock(ChatMemory.class);
-        knowledgeSearchService = Mockito.mock(KnowledgeSearchService.class);
         weaknessProfileService = Mockito.mock(WeaknessProfileService.class);
         interviewPlanService = Mockito.mock(InterviewPlanService.class);
         answerEvaluatorService = Mockito.mock(AnswerEvaluatorService.class);
         lifecycleService = Mockito.mock(InterviewLifecycleService.class);
-        support = newSupport(chatMemory, knowledgeSearchService, weaknessProfileService,
+        support = newSupport(chatMemory, weaknessProfileService,
                 interviewPlanService, answerEvaluatorService, lifecycleService);
 
         // 公共桩：薄弱点为空（不注入）、评估注入为空（不干扰断言）、记忆窗口为空。
-        // 注意：不再给 RAG 打桩——阶段 12 起装配链路不调用它（mock 默认返回 null，
-        // 若代码误接回会在拼接处炸 NPE，比"打了桩静默通过"更容易暴露回归）
         when(weaknessProfileService.loadProfile(anyString())).thenReturn("");
         when(answerEvaluatorService.evaluateTurn(anyString(), anyString(), anyString(), any()))
                 .thenReturn(new AnswerEvaluatorService.EvaluationOutcome(false, ""));
@@ -131,7 +125,6 @@ class StreamingPipelineBuildChatMessagesTest {
             verify(interviewPlanService, never()).ensurePlan(anyString(), anyString(), anyString());
             verify(answerEvaluatorService, never())
                     .evaluateTurn(anyString(), anyString(), anyString(), any());
-            verify(knowledgeSearchService, never()).search(anyString()); // 阶段 12：RAG 已断开
             assertTrue(messages.get(messages.size() - 1) instanceof UserMessage, "本轮消息仍在末位");
         }
 
@@ -169,7 +162,6 @@ class StreamingPipelineBuildChatMessagesTest {
             assertFalse(system.contains("本场面试已经结束"));
             assertTrue(system.contains("【面试计划】"), "进行中的会话计划照常注入");
             verify(answerEvaluatorService).evaluateTurn(anyString(), anyString(), anyString(), any());
-            verify(knowledgeSearchService, never()).search(anyString());
         }
 
         @Test

@@ -20,20 +20,7 @@ export interface ClearResult {
   bindingCleared: boolean
 }
 
-/** 后端知识库同步结果 */
-export interface SyncResult {
-  message: string
-  totalDocuments: number
-}
-
-/** 文档元数据 */
-export interface KnowledgeDoc {
-  fileName: string
-  chunkCount: number
-  status: string // INGESTED / FAILED
-  source: string // EXTERNAL / CLASSPATH
-  ingestedAt: string // ISO 字符串
-}
+// （旧向量链路的 SyncResult / KnowledgeDoc 已随阶段 7 删除；知识库相关类型见下方"知识库"节）
 
 /** 上传资料（JD/简历）结果：materialId 供聊天请求引用 */
 export interface MaterialUploadResult {
