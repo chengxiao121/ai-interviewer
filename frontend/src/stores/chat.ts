@@ -1,8 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { chatSse } from '@/api/assistant'
-import { getInterviewSession } from '@/api/interview'
-import type { ChatMessage, HistoryMessageDto } from '@/types'
+import { getInterviewSession, finishInterviewSession } from '@/api/interview'
+import type { ChatMessage, HistoryMessageDto, SessionStatus } from '@/types'
 
 /** 入场信息：首轮发送时随消息带给后端（落绑定 interview_session） */
 export interface InterviewEntry {
@@ -35,6 +35,10 @@ const sessionId = ref<string>(generateSessionId())
   /** 待发送的入场信息（入场完成 → 首条消息携带；发送成功后清空） */
   let pendingSetup: InterviewEntry | null = null
 
+  // ===== 会话生命周期（阶段 11：结束后不出题、报告才可看）=====
+  /** 当前会话状态（'' = 未知/未入场；绑定恢复或结束时更新） */
+  const sessionStatus = ref<SessionStatus | ''>('')
+
   /** 是否可发送 */
   const canSend = computed(() => !streaming.value && !entryNeeded.value)
 
@@ -60,10 +64,22 @@ const sessionId = ref<string>(generateSessionId())
     if (dto) {
       candidateName.value = dto.candidateId
       entryNeeded.value = false
+      sessionStatus.value = dto.status
     } else {
       candidateName.value = ''
       entryNeeded.value = true
+      sessionStatus.value = ''
     }
+  }
+
+  /**
+   * 结束面试（阶段 11）：调 finish 接口（幂等）→ 本地状态置 FINISHED。
+   * 结束后：报告按钮解锁、面试官不再出题（后端注入已结束提示）、头部状态更新。
+   * 抛错时调用方（ChatView）负责 toast/提示——这里只管状态。
+   */
+  async function finishInterview() {
+    const dto = await finishInterviewSession(sessionId.value)
+    sessionStatus.value = dto.status
   }
 
   /** 新建会话：生成 UUID，清空消息与入场状态 */
@@ -74,6 +90,7 @@ const sessionId = ref<string>(generateSessionId())
     error.value = ''
     entryNeeded.value = true
     candidateName.value = ''
+    sessionStatus.value = ''
     pendingSetup = null
   }
 
@@ -157,8 +174,10 @@ const sessionId = ref<string>(generateSessionId())
     canSend,
     entryNeeded,
     candidateName,
+    sessionStatus,
     loadHistory,
     applyBinding,
+    finishInterview,
     newSession,
     startInterview,
     send,

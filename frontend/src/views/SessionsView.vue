@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useSessionsStore } from '@/stores/sessions'
 import { useChatStore } from '@/stores/chat'
 import MessageBubble from '@/components/MessageBubble.vue'
-import type { InterviewSessionDto } from '@/types'
+import type { InterviewSessionDto, SessionStatus } from '@/types'
 
 const sessionsStore = useSessionsStore()
 const chatStore = useChatStore()
@@ -31,6 +31,10 @@ interface GroupItem {
   hasRecords: boolean
   resumeFileName?: string | null
   jdFileName?: string | null
+  /** 候选人 id（报告入口用：报告接口的跨会话薄弱点按此聚合）；孤儿会话无 */
+  candidateId?: string
+  /** 生命周期状态（阶段 11）：FINISHED 才解锁报告入口；孤儿会话无（undefined 视为未结束） */
+  status?: SessionStatus
 }
 /** 候选人分组 */
 interface CandidateGroup {
@@ -75,6 +79,8 @@ const groups = computed<CandidateGroup[]>(() => {
         hasRecords: memSet.has(b.sessionId),
         resumeFileName: b.resumeFileName,
         jdFileName: b.jdFileName,
+        candidateId: b.candidateId,
+        status: b.status,
       })),
     })
   }
@@ -111,6 +117,12 @@ async function viewHistory(id: string) {
 async function switchAndChat(id: string) {
   await sessionsStore.switchTo(id)
   router.push('/chat')
+}
+
+/** 查看该场面试的评估报告（报告接口 candidateId 归一化兜底，孤儿会话可不传） */
+function viewReport(item: GroupItem) {
+  const qs = item.candidateId ? `?candidateId=${encodeURIComponent(item.candidateId)}` : ''
+  router.push(`/report/${item.sessionId}${qs}`)
 }
 
 async function clearSession(item: GroupItem) {
@@ -212,7 +224,8 @@ function startNewInterview(candidateId: string) {
                 <div class="row-line">
                   <span class="row-title">
                     第 {{ item.index }} 场
-                    <em v-if="sessionsStore.current === item.sessionId" class="live-mark">· 进行中</em>
+                    <em v-if="sessionsStore.current === item.sessionId && item.status !== 'FINISHED'" class="live-mark">· 进行中</em>
+                    <em v-else-if="item.status === 'FINISHED'" class="finished-mark">· 已结束</em>
                   </span>
                   <!-- 时间与 hover 操作图标同位切换 -->
                   <span class="row-time">{{ item.timeLabel }}</span>
@@ -225,6 +238,15 @@ function startNewInterview(candidateId: string) {
                       @click="viewHistory(item.sessionId)"
                     >
                       <svg viewBox="0 0 16 16" width="14" height="14"><path d="M1.5 8s2.4-4.2 6.5-4.2S14.5 8 14.5 8s-2.4 4.2-6.5 4.2S1.5 8 1.5 8z" fill="none" stroke="currentColor" stroke-width="1.3"/><circle cx="8" cy="8" r="2" fill="none" stroke="currentColor" stroke-width="1.3"/></svg>
+                    </button>
+                    <!-- 报告门禁（阶段 11）：仅已结束的会话可看，未结束置灰并提示去聊天页结束 -->
+                    <button
+                      class="icon-btn"
+                      :disabled="!item.hasRecords || item.status !== 'FINISHED'"
+                      :title="item.status === 'FINISHED' ? '查看评估报告' : '面试结束后可查看报告（在聊天页点「结束面试」）'"
+                      @click="viewReport(item)"
+                    >
+                      <svg viewBox="0 0 16 16" width="14" height="14"><path d="M3.5 1.5h6L12.5 4.5v10h-9zM9.5 1.5v3h3M5.5 8h5M5.5 10.5h5" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     </button>
                     <button class="icon-btn" title="继续对话" @click="switchAndChat(item.sessionId)">
                       <svg viewBox="0 0 16 16" width="14" height="14"><path d="M2.5 3.5h11v7.5h-6.5L4 13.5v-2.5H2.5z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg>
@@ -420,6 +442,12 @@ function startNewInterview(candidateId: string) {
   font-size: 11px;
   font-weight: 500;
   color: var(--cinnabar);
+}
+.row-title .finished-mark {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ink-soft);
 }
 .row-time {
   margin-left: auto;

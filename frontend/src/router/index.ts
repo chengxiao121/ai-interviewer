@@ -10,6 +10,8 @@ const router = createRouter({
     { path: '/chat', name: 'chat', component: () => import('@/views/ChatView.vue') },
     { path: '/sessions', name: 'sessions', component: () => import('@/views/SessionsView.vue') },
     { path: '/knowledge', name: 'knowledge', component: () => import('@/views/KnowledgeView.vue') },
+    // 报告页：/report/:sessionId?candidateId=xxx（从会话卡片 / 聊天页头部进入，不在侧栏导航中）
+    { path: '/report/:sessionId', name: 'report', component: () => import('@/views/ReportView.vue') },
   ],
 })
 

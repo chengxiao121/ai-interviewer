@@ -1,5 +1,6 @@
 package com.xiao.aiagent.agent;
 import com.xiao.aiagent.service.InterviewPlanService;
+import com.xiao.aiagent.service.InterviewLifecycleService;
 import com.xiao.aiagent.service.MaterialStoreService;
 import com.xiao.aiagent.common.OutputGuard;
 import com.xiao.aiagent.common.InterviewerStreamFilter;
@@ -88,10 +89,11 @@ public class AgentRouter extends StreamingPipelineSupport {
                        WeaknessProfileService weaknessProfileService,
                        InterviewPlanService interviewPlanService,
                        AnswerEvaluatorService answerEvaluatorService,
+                       InterviewLifecycleService interviewLifecycleService,
                        @Value("${app.interview.output-guard.mode:log}") String outputGuardMode) {
 
         super(chatMemory, memorySaver, knowledgeSearchService, weaknessProfileService,
-                interviewPlanService, answerEvaluatorService,
+                interviewPlanService, answerEvaluatorService, interviewLifecycleService,
                 OutputGuard.Mode.valueOf(outputGuardMode.trim().toUpperCase()));
 
         // ── 组装"分诊台"（只剩两个科室）──

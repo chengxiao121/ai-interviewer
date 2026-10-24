@@ -1,5 +1,6 @@
 package com.xiao.aiagent.agent;
 import com.xiao.aiagent.service.InterviewPlanService;
+import com.xiao.aiagent.service.InterviewLifecycleService;
 import com.xiao.aiagent.common.OutputGuard;
 import com.xiao.aiagent.service.KnowledgeSearchService;
 import com.xiao.aiagent.common.MaterialSanitizer;
@@ -153,11 +154,13 @@ public class InterviewAssistant extends StreamingPipelineSupport {
                               WeaknessProfileService weaknessProfileService,
                               InterviewPlanService interviewPlanService,
                               AnswerEvaluatorService answerEvaluatorService,
+                              InterviewLifecycleService interviewLifecycleService,
                               @Value("${app.interview.output-guard.mode:log}") String outputGuardMode) {
 
-        // 公共依赖（记忆/存档器/RAG/薄弱点/计划/评估/守卫模式）交给基类持有（P2-7 收口第一步）
+        // 公共依赖（记忆/存档器/RAG/薄弱点/计划/评估/生命周期/守卫模式）交给基类持有（P2-7 收口第一步）
         super(chatMemory, memorySaver, knowledgeSearchService,
                 weaknessProfileService, interviewPlanService, answerEvaluatorService,
+                interviewLifecycleService,
                 OutputGuard.Mode.valueOf(outputGuardMode.trim().toUpperCase()));
 
         // MCP 工具通过 ObjectProvider 注入（而非直接 @Autowired）：

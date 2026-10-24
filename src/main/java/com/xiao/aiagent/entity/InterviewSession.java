@@ -30,6 +30,11 @@ import java.util.List;
 @NoArgsConstructor
 public class InterviewSession {
 
+    /** 会话状态：进行中（入场默认，可出题） */
+    public static final String STATUS_IN_PROGRESS = "IN_PROGRESS";
+    /** 会话状态：已结束（面试官只答疑不出题；评估报告仅此状态可看） */
+    public static final String STATUS_FINISHED = "FINISHED";
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -56,6 +61,14 @@ public class InterviewSession {
     /** 入场时间（服务端生成） */
     @Column(nullable = false)
     private LocalDateTime createdAt;
+
+    /**
+     * 会话生命周期状态（阶段 11 新增）：IN_PROGRESS（默认）/ FINISHED。
+     * 把"何时结束"的决定权从模型手里收回来交给用户：结束是显式动作（finish 接口），
+     * 不是模型自觉——结束后每轮注入"不出新题"提示，报告门禁以此为准。
+     */
+    @Column(nullable = false, length = 16)
+    private String status = STATUS_IN_PROGRESS;
 
     /** 全参构造（@Data 不生成） */
     public InterviewSession(String sessionId, String candidateId, List<String> materialIds) {

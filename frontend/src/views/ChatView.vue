@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, nextTick, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useChatStore } from '@/stores/chat'
 import MessageBubble from '@/components/MessageBubble.vue'
 import ChatInput from '@/components/ChatInput.vue'
@@ -7,6 +8,38 @@ import EntryForm from '@/components/EntryForm.vue'
 import type { InterviewEntry } from '@/stores/chat'
 
 const chatStore = useChatStore()
+const router = useRouter()
+
+/** 跳转本场评估报告（候选人名即 candidateId——绑定恢复时后端 candidateId 就写入 candidateName） */
+function viewReport() {
+  if (!chatStore.sessionId) return
+  const qs = chatStore.candidateName ? `?candidateId=${encodeURIComponent(chatStore.candidateName)}` : ''
+  router.push(`/report/${chatStore.sessionId}${qs}`)
+}
+
+/**
+ * 结束面试（阶段 11）：确认 → 调 finish 接口（状态机置 FINISHED）→ 跳评估报告页。
+ * 结束后面试官不再出题（后端每轮注入已结束提示）；报告门禁以此状态解锁。
+ * 收尾总结由报告的"总体结论"承担，不再额外走一轮 LLM 收尾（避免特殊消息通道）。
+ */
+async function finishInterview() {
+  if (!chatStore.sessionId || chatStore.sessionStatus === 'FINISHED') return
+  if (!window.confirm('确定结束本场面试吗？结束后面试官不再出题，评估报告将解锁（不可恢复）。')) {
+    return
+  }
+  finishing.value = true
+  try {
+    await chatStore.finishInterview()
+    viewReport()
+  } catch (e) {
+    chatStore.error = e instanceof Error ? e.message : '结束面试失败，请重试'
+  } finally {
+    finishing.value = false
+  }
+}
+const finishing = ref(false)
+/** 已结束的会话：头部眉标与按钮随之切换 */
+const isFinished = computed(() => chatStore.sessionStatus === 'FINISHED')
 const scrollRef = ref<HTMLDivElement | null>(null)
 
 // 是否流式生成中的最后一条 assistant 消息
@@ -45,7 +78,7 @@ const starters = [
   <div class="chat-view">
     <header class="page-head">
       <div class="title-block">
-        <p class="eyebrow">LIVE · 面试进行中</p>
+        <p class="eyebrow">{{ isFinished ? 'FINISHED · 面试已结束' : 'LIVE · 面试进行中' }}</p>
         <h2>面试对话</h2>
       </div>
       <div class="head-tags">
@@ -53,6 +86,25 @@ const starters = [
           {{ chatStore.candidateName }}
         </span>
         <span class="session-tag" :title="chatStore.sessionId">NO. {{ chatStore.sessionId }}</span>
+        <!-- 报告入口（阶段 11 门禁）：仅已结束的会话可见 -->
+        <button
+          v-if="chatStore.sessionId && isFinished"
+          class="report-entry"
+          title="查看本场评估报告"
+          @click="viewReport"
+        >
+          评估报告
+        </button>
+        <!-- 结束面试（阶段 11）：进行中的会话显示；确认后状态置 FINISHED 并跳报告 -->
+        <button
+          v-else-if="chatStore.sessionId && !chatStore.entryNeeded"
+          class="report-entry finish-entry"
+          :disabled="finishing"
+          title="结束本场面试，解锁评估报告"
+          @click="finishInterview"
+        >
+          {{ finishing ? '结束中…' : '结束面试' }}
+        </button>
       </div>
     </header>
     <div class="page-rule"></div>
@@ -133,6 +185,37 @@ const starters = [
   text-overflow: ellipsis;
   white-space: nowrap;
   padding-bottom: 3px;
+}
+.report-entry {
+  appearance: none;
+  font-family: var(--serif);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--mint-deep);
+  background: var(--mint-wash);
+  border: 1px solid var(--mint);
+  border-radius: 999px;
+  padding: 4px 14px;
+  cursor: pointer;
+  transition: background 0.16s ease, transform 0.16s ease;
+}
+/* 结束面试：朱砂描边与报告入口区分（动作更"重"，视觉上也该更醒目） */
+.finish-entry {
+  color: var(--cinnabar, #a2372a);
+  background: transparent;
+  border-color: var(--cinnabar, #a2372a);
+}
+.finish-entry:hover {
+  background: rgba(162, 55, 42, 0.06);
+}
+.finish-entry:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+.report-entry:hover {
+  background: rgba(63, 157, 116, 0.18);
+  transform: translateY(-1px);
 }
 
 .messages {
