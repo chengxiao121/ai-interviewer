@@ -3,6 +3,7 @@ package com.xiao.aiagent.controller;
 import com.xiao.aiagent.dto.InterviewSessionDto;
 import com.xiao.aiagent.entity.InterviewSession;
 import com.xiao.aiagent.repository.InterviewSessionRepository;
+import com.xiao.aiagent.repository.KnowledgeBaseRepository;
 import com.xiao.aiagent.service.InterviewLifecycleService;
 import com.xiao.aiagent.service.MaterialStoreService;
 import org.springframework.http.ResponseEntity;
@@ -35,13 +36,17 @@ public class InterviewSessionController {
     private final InterviewSessionRepository repository;
     private final MaterialStoreService materialStoreService;
     private final InterviewLifecycleService lifecycleService;
+    /** 知识库名解析（阶段 12）：会话卡片展示"用了哪个题库"，读不到时降级为 null */
+    private final KnowledgeBaseRepository knowledgeBaseRepository;
 
     public InterviewSessionController(InterviewSessionRepository repository,
                                       MaterialStoreService materialStoreService,
-                                      InterviewLifecycleService lifecycleService) {
+                                      InterviewLifecycleService lifecycleService,
+                                      KnowledgeBaseRepository knowledgeBaseRepository) {
         this.repository = repository;
         this.materialStoreService = materialStoreService;
         this.lifecycleService = lifecycleService;
+        this.knowledgeBaseRepository = knowledgeBaseRepository;
     }
 
     /** 全部面试会话绑定（按入场时间倒序） */
@@ -88,7 +93,20 @@ public class InterviewSessionController {
         }
         return new InterviewSessionDto(session.getSessionId(), session.getCandidateId(),
                 session.materialIds(), session.getCreatedAt().toString(), resumeFileName, jdFileName,
-                session.getStatus());
+                session.getStatus(), session.getMode(), session.getKbId(), resolveKbName(session.getKbId()));
+    }
+
+    /**
+     * 知识库名解析（阶段 12）：知识库可能已被删除（题目表不设外键），
+     * 此时返回 null 让前端降级展示——不要让"删了题库"连带把历史会话列表打挂。
+     */
+    private String resolveKbName(Long kbId) {
+        if (kbId == null) {
+            return null;
+        }
+        return knowledgeBaseRepository.findById(kbId)
+                .map(kb -> kb.getName())
+                .orElse(null);
     }
 
 }
