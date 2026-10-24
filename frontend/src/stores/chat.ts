@@ -2,13 +2,22 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { chatSse } from '@/api/assistant'
 import { getInterviewSession, finishInterviewSession } from '@/api/interview'
-import type { ChatMessage, HistoryMessageDto, SessionStatus } from '@/types'
+import type { ChatMessage, HistoryMessageDto, InterviewMode, SessionStatus } from '@/types'
 
 /** 入场信息：首轮发送时随消息带给后端（落绑定 interview_session） */
 export interface InterviewEntry {
   candidateName: string
+  /** 面试模式（阶段 12）：MATERIAL=资料面试 / KNOWLEDGE=知识库面试 */
+  mode: InterviewMode
+  /** 资料模式的资料 id（KNOWLEDGE 模式为空数组） */
   materialIds: string[]
+  /** 资料模式的资料名（首轮气泡 📎 前缀展示用） */
   materialNames: string[]
+  /** 知识库模式：绑定题库 id 与名称（气泡 📚 前缀展示用） */
+  kbId?: number
+  kbName?: string
+  /** 知识库模式：组卷题数（缺省由后端取 20） */
+  questionCount?: number
 }
 
 /**
@@ -38,6 +47,9 @@ const sessionId = ref<string>(generateSessionId())
   // ===== 会话生命周期（阶段 11：结束后不出题、报告才可看）=====
   /** 当前会话状态（'' = 未知/未入场；绑定恢复或结束时更新） */
   const sessionStatus = ref<SessionStatus | ''>('')
+  // ===== 会话模式（阶段 12：头部标签展示，不可切换）=====
+  /** 当前会话模式（'' = 未知/未入场） */
+  const sessionMode = ref<InterviewMode | ''>('')
 
   /** 是否可发送 */
   const canSend = computed(() => !streaming.value && !entryNeeded.value)
@@ -65,10 +77,12 @@ const sessionId = ref<string>(generateSessionId())
       candidateName.value = dto.candidateId
       entryNeeded.value = false
       sessionStatus.value = dto.status
+      sessionMode.value = dto.mode
     } else {
       candidateName.value = ''
       entryNeeded.value = true
       sessionStatus.value = ''
+      sessionMode.value = ''
     }
   }
 
@@ -91,6 +105,7 @@ const sessionId = ref<string>(generateSessionId())
     entryNeeded.value = true
     candidateName.value = ''
     sessionStatus.value = ''
+    sessionMode.value = ''
     pendingSetup = null
   }
 
@@ -102,23 +117,31 @@ const sessionId = ref<string>(generateSessionId())
     pendingSetup = setup
     candidateName.value = setup.candidateName
     entryNeeded.value = false
+    sessionMode.value = setup.mode
     error.value = ''
+  }
+
+  /** 首轮气泡的入场前缀：资料模式 📎 资料、知识库模式 📚 题库（仅本地展示） */
+  function entryPrefix(entry: InterviewEntry): string {
+    if (entry.mode === 'KNOWLEDGE') {
+      return `📚 ${entry.kbName ?? '知识库'}${entry.questionCount ? ` · ${entry.questionCount} 题` : ''}`
+    }
+    return entry.materialNames.length > 0 ? `📎 ${entry.materialNames.join('、')}` : ''
   }
 
   /**
    * 发送消息：推入 user 消息后流式追加 assistant 消息。
-   * 首条消息（有待发入场信息时）自动携带 candidateName + materialIds，发送成功后清空。
+   * 首条消息（有待发入场信息时）自动携带入场信息（姓名 + 模式 + 资料/题库），发送成功后清空。
    * @param text 消息文本
    */
   function send(text: string) {
     const content = text.trim()
     if (!content || streaming.value || entryNeeded.value) return
 
-    // 入场首轮：气泡显示 📎 资料前缀（仅本地展示；后端记忆里只存原话）
+    // 入场首轮：气泡显示 📎 资料 / 📚 题库 前缀（仅本地展示；后端记忆里只存原话）
     const entry = pendingSetup
-    const display = entry && entry.materialNames.length > 0
-      ? `📎 ${entry.materialNames.join('、')}\n\n${content}`
-      : content
+    const prefix = entry ? entryPrefix(entry) : ''
+    const display = prefix ? `${prefix}\n\n${content}` : content
     messages.value.push({ role: 'user', content: display })
     // 占位 assistant 消息，流式追加
     const assistantMsg = ref<ChatMessage>({ role: 'assistant', content: '' })
@@ -153,7 +176,16 @@ const sessionId = ref<string>(generateSessionId())
           messages.value.pop()
         }
       },
-      entry ? { candidateName: entry.candidateName, materialIds: entry.materialIds } : undefined,
+      entry
+        ? {
+            candidateName: entry.candidateName,
+            materialIds: entry.materialIds,
+            mode: entry.mode,
+            ...(entry.mode === 'KNOWLEDGE' && entry.kbId
+              ? { kbId: entry.kbId, ...(entry.questionCount ? { questionCount: entry.questionCount } : {}) }
+              : {}),
+          }
+        : undefined,
     )
   }
 
@@ -175,6 +207,7 @@ const sessionId = ref<string>(generateSessionId())
     entryNeeded,
     candidateName,
     sessionStatus,
+    sessionMode,
     loadHistory,
     applyBinding,
     finishInterview,

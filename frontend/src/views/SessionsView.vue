@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useSessionsStore } from '@/stores/sessions'
 import { useChatStore } from '@/stores/chat'
 import MessageBubble from '@/components/MessageBubble.vue'
-import type { InterviewSessionDto, SessionStatus } from '@/types'
+import type { InterviewSessionDto, SessionStatus, InterviewMode } from '@/types'
 
 const sessionsStore = useSessionsStore()
 const chatStore = useChatStore()
@@ -35,6 +35,10 @@ interface GroupItem {
   candidateId?: string
   /** 生命周期状态（阶段 11）：FINISHED 才解锁报告入口；孤儿会话无（undefined 视为未结束） */
   status?: SessionStatus
+  /** 面试模式（阶段 12）：卡片按模式显示不同信息（资料=简历/JD 名，知识库=题库名） */
+  mode?: InterviewMode
+  /** 绑定的知识库名（KNOWLEDGE 模式展示；库被删除后为 null，降级显示） */
+  kbName?: string | null
 }
 /** 候选人分组 */
 interface CandidateGroup {
@@ -81,6 +85,8 @@ const groups = computed<CandidateGroup[]>(() => {
         jdFileName: b.jdFileName,
         candidateId: b.candidateId,
         status: b.status,
+        mode: b.mode,
+        kbName: b.kbName,
       })),
     })
   }
@@ -135,19 +141,37 @@ async function clearSession(item: GroupItem) {
 }
 
 /**
- * 用该候选人的身份直接开新面试：沿用最近一场绑定的简历/JD，
- * 免去重填入场表单。绑定不在点击时落库，而是随首轮聊天消息写入（与入场表单同一路径）。
+ * 用该候选人的身份直接开新面试：
+ *   资料模式 → 沿用最近一场绑定的简历/JD，免去重填入场表单；
+ *   知识库模式（阶段 12）→ 沿用最近一场绑定的题库（题数用默认 20，
+ *   题库容量不足时后端 400 提示会直接出现在聊天页错误栏）。
+ * 绑定不在点击时落库，而是随首轮聊天消息写入（与入场表单同一路径）。
  */
 function startNewInterview(candidateId: string) {
   // 绑定列表按入场时间倒序，第一个命中即最近一场
   const latest = sessionsStore.bindings.find((b) => b.candidateId === candidateId)
   if (!latest) return
+  chatStore.newSession()
+  if (latest.mode === 'KNOWLEDGE') {
+    if (!latest.kbId) return
+    chatStore.startInterview({
+      candidateName: candidateId,
+      mode: 'KNOWLEDGE',
+      materialIds: [],
+      materialNames: [],
+      kbId: latest.kbId,
+      kbName: latest.kbName ?? undefined,
+      questionCount: 20,
+    })
+    router.push('/chat')
+    return
+  }
   const resumeIds = latest.materialIds.filter((id) => id.startsWith('RESUME-'))
   const jdIds = latest.materialIds.filter((id) => id.startsWith('JD-'))
   if (resumeIds.length === 0) return
-  chatStore.newSession()
   chatStore.startInterview({
     candidateName: candidateId,
+    mode: 'MATERIAL',
     materialIds: [...resumeIds, ...jdIds],
     materialNames: [
       latest.resumeFileName ?? '简历',
@@ -256,9 +280,15 @@ function startNewInterview(candidateId: string) {
                     </button>
                   </span>
                 </div>
-                <div v-if="item.resumeFileName || item.jdFileName" class="row-sub">
-                  <span v-if="item.resumeFileName" :title="item.resumeFileName">简历 {{ item.resumeFileName }}</span>
-                  <span v-if="item.jdFileName" :title="item.jdFileName">JD {{ item.jdFileName }}</span>
+                <!-- 卡片副行（阶段 12 按模式分叉）：知识库显示题库名，资料显示简历/JD 名 -->
+                <div v-if="item.mode === 'KNOWLEDGE' || item.resumeFileName || item.jdFileName" class="row-sub">
+                  <span v-if="item.mode === 'KNOWLEDGE'" class="kb-mark" :title="item.kbName ?? undefined">
+                    📚 {{ item.kbName ?? '题库（已删除）' }}
+                  </span>
+                  <template v-else>
+                    <span v-if="item.resumeFileName" :title="item.resumeFileName">简历 {{ item.resumeFileName }}</span>
+                    <span v-if="item.jdFileName" :title="item.jdFileName">JD {{ item.jdFileName }}</span>
+                  </template>
                 </div>
               </li>
             </ul>
@@ -526,6 +556,9 @@ function startNewInterview(candidateId: string) {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 150px;
+}
+.row-sub .kb-mark {
+  max-width: 260px;
 }
 
 /* 记录面板 */

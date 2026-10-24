@@ -82,6 +82,10 @@ const starters = [
         <h2>面试对话</h2>
       </div>
       <div class="head-tags">
+        <!-- 模式标签（阶段 12）：入场绑定后不可切换，头部只展示不提供切换 -->
+        <span v-if="chatStore.sessionMode" class="mode-tag" :class="{ kb: chatStore.sessionMode === 'KNOWLEDGE' }">
+          {{ chatStore.sessionMode === 'KNOWLEDGE' ? '题库面试' : '资料面试' }}
+        </span>
         <span v-if="chatStore.candidateName" class="candidate-tag" title="候选人">
           {{ chatStore.candidateName }}
         </span>
@@ -164,6 +168,21 @@ const starters = [
   display: flex;
   align-items: center;
   gap: 10px;
+}
+/* 模式标签（阶段 12）：资料=墨绿描边，题库=蓝色描边，与候选人姓名的朱砂区分 */
+.mode-tag {
+  font-family: var(--serif);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--mint-deep);
+  border: 1px solid var(--mint);
+  border-radius: 4px;
+  padding: 3px 9px;
+}
+.mode-tag.kb {
+  color: var(--ink-blue);
+  border-color: var(--ink-blue);
 }
 .candidate-tag {
   font-family: var(--serif);
