@@ -97,6 +97,9 @@ public class PaperComposeService {
 
         // 容量校验：不足直接拒绝并给出可用题数（不静默降级）
         int capacity = questionBankRepository.countByKbIdAndStatus(kbId, QuestionBankItem.STATUS_ACTIVE);
+        if (capacity == 0) {
+            throw new IllegalArgumentException("该知识库还没有题目，请先上传题库文档");
+        }
         if (capacity < count) {
             throw new IllegalArgumentException("该题库共 " + capacity + " 道可用题，最多可选 "
                     + capacity + " 道，无法组 " + count + " 道题的卷子，请减少题数或补充题库");

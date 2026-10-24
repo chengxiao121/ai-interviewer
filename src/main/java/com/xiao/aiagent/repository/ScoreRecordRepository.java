@@ -13,6 +13,9 @@ public interface ScoreRecordRepository extends JpaRepository<ScoreRecord, Long> 
     /** 查某会话所有评分记录（按时间正序） */
     List<ScoreRecord> findBySessionIdOrderByCreatedAtAsc(String sessionId);
 
+    /** 某会话已落库的评分条数（阶段 12：知识库模式"本轮应出第 N 题"的进度依据） */
+    int countBySessionId(String sessionId);
+
     /**
      * 幂等去重：同会话同题目的已有记录。
      * 模型偶尔会对同一道题重复调用 scoreRecord 工具，命中时更新而非新增，避免污染统计。

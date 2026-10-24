@@ -4,6 +4,8 @@ import com.xiao.aiagent.entity.InterviewSession;
 import com.xiao.aiagent.repository.InterviewSessionRepository;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
+
 /**
  * 面试会话生命周期服务（阶段 11 新增）——status 状态机的唯一写入口。
  *
@@ -28,6 +30,15 @@ public class InterviewLifecycleService {
         return repository.findBySessionId(sessionId)
                 .map(s -> InterviewSession.STATUS_FINISHED.equals(s.getStatus()))
                 .orElse(false);
+    }
+
+    /**
+     * 加载会话绑定（阶段 12）：一次查询同时拿到【状态 + 模式】。
+     * 聊天管道每轮都要做状态分叉（是否已结束）与模式分叉（注入卷子还是计划），
+     * 两次独立查询合并为一次（本地 PG 虽便宜，也没必要花两次）。
+     */
+    public Optional<InterviewSession> loadSession(String sessionId) {
+        return repository.findBySessionId(sessionId);
     }
 
     /**

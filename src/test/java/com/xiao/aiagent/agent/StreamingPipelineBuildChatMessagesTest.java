@@ -2,6 +2,7 @@ package com.xiao.aiagent.agent;
 
 import com.xiao.aiagent.common.OutputGuard;
 import com.xiao.aiagent.entity.InterviewPlan;
+import com.xiao.aiagent.entity.InterviewSession;
 import com.xiao.aiagent.service.AnswerEvaluatorService;
 import com.xiao.aiagent.service.InterviewLifecycleService;
 import com.xiao.aiagent.service.InterviewPlanService;
@@ -23,23 +24,26 @@ import java.util.Optional;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * StreamingPipelineSupport.buildChatMessages 的会话状态分叉单测（阶段 11 回归锁定）。
+ * StreamingPipelineSupport.buildChatMessages 的状态/模式分叉单测
+ * （阶段 11 状态机回归锁定 + 阶段 12 模式分叉）。
  *
- * 基类是抽象类且装配逻辑是 protected——用匿名子类实例化（依赖全 mock）直测，
- * 锁定两分支：
- * ① 已结束 → 注入 FINISHED_PROMPT，跳过 ensurePlan/evaluateTurn（不出题不评分）；
- * ② 进行中 → 无 FINISHED_PROMPT，计划与评估照常注入（原行为不变）。
- *
- * 阶段 12 追加：两种状态都【不得】再调用题库 RAG 检索（检索 query 与"下一题问什么"错配，
- * 已整体断开），用 verify(never()) 锁住，防止后续误接回。
+ * 基类是抽象类且装配逻辑是 protected——用匿名子类实例化（依赖全 mock）直测，锁定四分支：
+ * ① 已结束 → 注入 FINISHED_PROMPT，跳过计划/卷子/评估（不出题不评分），两种模式一致；
+ * ② 进行中 + 知识库 → 注入【本场卷子】（renderPaper，出题进度=评分条数+1）+ 模式纪律，
+ *    绝不调 ensurePlan（知识库面试靠卷子，不靠 LLM 现生成计划）；
+ * ③ 进行中 + 资料模式 → 计划照常（原行为不变）；
+ * ④ 未入场的会话（无绑定）→ 按资料模式处理（老行为兼容）。
+ * 另锁：任何分支都不得再调用题库 RAG（阶段 12 已断开）。
  */
-@DisplayName("buildChatMessages：已结束面试注入不出题提示并跳过计划/评估")
+@DisplayName("buildChatMessages：状态/模式分叉（结束提示 / 卷子注入 / 计划注入）")
 class StreamingPipelineBuildChatMessagesTest {
 
     private static final String SESSION_ID = "s1";
@@ -66,6 +70,14 @@ class StreamingPipelineBuildChatMessagesTest {
         };
     }
 
+    /** 造一条指定状态与模式的会话绑定 */
+    private static InterviewSession session(String status, String mode) {
+        InterviewSession s = new InterviewSession(SESSION_ID, CANDIDATE_ID, List.of());
+        s.setStatus(status);
+        s.setMode(mode);
+        return s;
+    }
+
     @BeforeEach
     void setUp() {
         chatMemory = Mockito.mock(ChatMemory.class);
@@ -83,7 +95,12 @@ class StreamingPipelineBuildChatMessagesTest {
         when(weaknessProfileService.loadProfile(anyString())).thenReturn("");
         when(answerEvaluatorService.evaluateTurn(anyString(), anyString(), anyString(), any()))
                 .thenReturn(new AnswerEvaluatorService.EvaluationOutcome(false, ""));
+        when(answerEvaluatorService.countScored(anyString())).thenReturn(0);
         when(chatMemory.get(anyString())).thenReturn(List.of());
+        // 渲染类默认桩：真实实现契约是"降级返回空串、绝不返回 null"（mock 默认返回 null 会伪装出 NPE）；
+        // 具体用例需要特定渲染结果时在用例内覆盖
+        when(interviewPlanService.renderPaper(any(), anyInt())).thenReturn("");
+        when(interviewPlanService.renderPlan(any())).thenReturn("");
     }
 
     /** 统计装配结果里的 SystemMessage 正文 */
@@ -98,13 +115,14 @@ class StreamingPipelineBuildChatMessagesTest {
     }
 
     @Nested
-    @DisplayName("已结束的会话")
+    @DisplayName("已结束的会话（两种模式行为一致）")
     class 已结束 {
 
         @Test
-        @DisplayName("注入不出题提示；跳过计划生成与评估；不调用题库 RAG（阶段 12 已断开）")
-        void 注入结束提示并跳过出题链路() {
-            when(lifecycleService.isFinished(SESSION_ID)).thenReturn(true);
+        @DisplayName("资料模式：注入不出题提示；跳过计划与评估；不调用题库 RAG")
+        void 资料模式已结束() {
+            when(lifecycleService.loadSession(SESSION_ID))
+                    .thenReturn(Optional.of(session(InterviewSession.STATUS_FINISHED, InterviewSession.MODE_MATERIAL)));
 
             List<Message> messages = support.buildChatMessages("什么是线程池？", SESSION_ID, CANDIDATE_ID);
             String system = systemTexts(messages);
@@ -116,6 +134,21 @@ class StreamingPipelineBuildChatMessagesTest {
             verify(knowledgeSearchService, never()).search(anyString()); // 阶段 12：RAG 已断开
             assertTrue(messages.get(messages.size() - 1) instanceof UserMessage, "本轮消息仍在末位");
         }
+
+        @Test
+        @DisplayName("知识库模式：同样只注入不出题提示，不再注入卷子与评估")
+        void 知识库模式已结束() {
+            when(lifecycleService.loadSession(SESSION_ID))
+                    .thenReturn(Optional.of(session(InterviewSession.STATUS_FINISHED, InterviewSession.MODE_KNOWLEDGE)));
+
+            String system = systemTexts(support.buildChatMessages("总结一下", SESSION_ID, CANDIDATE_ID));
+
+            assertTrue(system.contains("本场面试已经结束"));
+            assertFalse(system.contains("【本场卷子】"), "已结束不再注入卷子");
+            verify(interviewPlanService, never()).loadPlan(anyString());
+            verify(answerEvaluatorService, never())
+                    .evaluateTurn(anyString(), anyString(), anyString(), any());
+        }
     }
 
     @Nested
@@ -123,20 +156,81 @@ class StreamingPipelineBuildChatMessagesTest {
     class 进行中 {
 
         @Test
-        @DisplayName("不注入结束提示；计划与评估照常执行，且不调用题库 RAG（阶段 12 已断开）")
-        void 原行为不变() {
-            when(lifecycleService.isFinished(SESSION_ID)).thenReturn(false);
+        @DisplayName("资料模式：不注入结束提示；计划与评估照常（原行为不变）；不调 RAG")
+        void 资料模式原行为不变() {
+            when(lifecycleService.loadSession(SESSION_ID))
+                    .thenReturn(Optional.of(session(InterviewSession.STATUS_IN_PROGRESS, InterviewSession.MODE_MATERIAL)));
             InterviewPlan plan = new InterviewPlan();
             when(interviewPlanService.ensurePlan(anyString(), anyString(), anyString())).thenReturn(plan);
             when(interviewPlanService.renderPlan(plan)).thenReturn("【面试计划】Java 并发");
 
-            List<Message> messages = support.buildChatMessages("线程池核心参数有哪些", SESSION_ID, CANDIDATE_ID);
-            String system = systemTexts(messages);
+            String system = systemTexts(support.buildChatMessages("线程池核心参数有哪些", SESSION_ID, CANDIDATE_ID));
 
             assertFalse(system.contains("本场面试已经结束"));
             assertTrue(system.contains("【面试计划】"), "进行中的会话计划照常注入");
             verify(answerEvaluatorService).evaluateTurn(anyString(), anyString(), anyString(), any());
-            verify(knowledgeSearchService, never()).search(anyString()); // 阶段 12：RAG 已断开
+            verify(knowledgeSearchService, never()).search(anyString());
+        }
+
+        @Test
+        @DisplayName("未入场的会话（无绑定）→ 按资料模式处理（老行为兼容）")
+        void 未入场按资料模式() {
+            when(lifecycleService.loadSession(SESSION_ID)).thenReturn(Optional.empty());
+            InterviewPlan plan = new InterviewPlan();
+            when(interviewPlanService.ensurePlan(anyString(), anyString(), anyString())).thenReturn(plan);
+            when(interviewPlanService.renderPlan(plan)).thenReturn("【面试计划】自由面");
+
+            support.buildChatMessages("来一场面试", SESSION_ID, CANDIDATE_ID);
+
+            verify(interviewPlanService).ensurePlan(anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("知识库模式：注入卷子（出题进度=评分条数+1）与模式纪律；绝不调 ensurePlan")
+        void 知识库模式注入卷子() {
+            when(lifecycleService.loadSession(SESSION_ID))
+                    .thenReturn(Optional.of(session(InterviewSession.STATUS_IN_PROGRESS, InterviewSession.MODE_KNOWLEDGE)));
+            InterviewPlan plan = new InterviewPlan();
+            when(interviewPlanService.loadPlan(SESSION_ID)).thenReturn(Optional.of(plan));
+            when(interviewPlanService.renderPaper(plan, 4)).thenReturn("【本场卷子】第 4 题……");
+            when(answerEvaluatorService.countScored(SESSION_ID)).thenReturn(3); // 已评 3 道 → 本轮应出第 4 题
+
+            String system = systemTexts(support.buildChatMessages("下一题", SESSION_ID, CANDIDATE_ID));
+
+            assertTrue(system.contains("【本场卷子】"), "知识库模式注入卷子");
+            assertTrue(system.contains("【本场模式】"), "注入模式纪律覆盖（不追问）");
+            assertFalse(system.contains("【面试计划】"));
+            verify(interviewPlanService).renderPaper(plan, 4);
+            verify(interviewPlanService, never()).ensurePlan(anyString(), anyString(), anyString());
+            verify(answerEvaluatorService).evaluateTurn(anyString(), anyString(), anyString(), any());
+        }
+
+        @Test
+        @DisplayName("知识库模式查不到卷子（数据异常）→ 不炸：无卷子注入但模式纪律仍在")
+        void 知识库无卷子降级() {
+            when(lifecycleService.loadSession(SESSION_ID))
+                    .thenReturn(Optional.of(session(InterviewSession.STATUS_IN_PROGRESS, InterviewSession.MODE_KNOWLEDGE)));
+            when(interviewPlanService.loadPlan(SESSION_ID)).thenReturn(Optional.empty());
+
+            String system = systemTexts(support.buildChatMessages("开始吧", SESSION_ID, CANDIDATE_ID));
+
+            assertFalse(system.contains("【本场卷子】"));
+            assertTrue(system.contains("【本场模式】"), "纪律提示照常注入");
+            verify(interviewPlanService, never()).ensurePlan(anyString(), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("首轮（评分 0 条）→ 出题进度为第 1 题")
+        void 首轮进度() {
+            when(lifecycleService.loadSession(SESSION_ID))
+                    .thenReturn(Optional.of(session(InterviewSession.STATUS_IN_PROGRESS, InterviewSession.MODE_KNOWLEDGE)));
+            InterviewPlan plan = new InterviewPlan();
+            when(interviewPlanService.loadPlan(SESSION_ID)).thenReturn(Optional.of(plan));
+            when(interviewPlanService.renderPaper(eq(plan), eq(1))).thenReturn("【本场卷子】第 1 题……");
+
+            support.buildChatMessages("开始", SESSION_ID, CANDIDATE_ID);
+
+            verify(interviewPlanService).renderPaper(plan, 1);
         }
     }
 }

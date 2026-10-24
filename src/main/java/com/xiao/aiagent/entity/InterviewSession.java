@@ -97,12 +97,23 @@ public class InterviewSession {
     @Column(nullable = false, length = 16)
     private String status = STATUS_IN_PROGRESS;
 
-    /** 全参构造（@Data 不生成） */
+    /** 全参构造（@Data 不生成）：资料模式入场（materials 必在） */
     public InterviewSession(String sessionId, String candidateId, List<String> materialIds) {
         this.sessionId = sessionId;
         this.candidateId = candidateId;
         this.materials = String.join(",", materialIds);
         this.createdAt = LocalDateTime.now();
+    }
+
+    /**
+     * 知识库模式入场（阶段 12）：无资料可绑（materials 空串），模式与知识库在构造时锁死——
+     * 绑定不可变（要换题库/换模式就开新会话）由构造形态直接表达，不靠调用方记得 set。
+     */
+    public static InterviewSession knowledgeSession(String sessionId, String candidateId, Long kbId) {
+        InterviewSession session = new InterviewSession(sessionId, candidateId, List.of());
+        session.mode = MODE_KNOWLEDGE;
+        session.kbId = kbId;
+        return session;
     }
 
     /**

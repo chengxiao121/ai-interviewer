@@ -117,6 +117,15 @@ public class AnswerEvaluatorService {
     }
 
     /**
+     * 本会话已落库的评分条数（阶段 12，知识库模式"第 N 题"进度的数据源）。
+     * 口径：每答完一题并评分就 +1，所以"已评条数 + 1 = 本轮应出的题号"；
+     * 答非所问的轮次不产生评分 → 题号不推进（允许重复该题或提示作答，见实施计划阶段 5 任务 4）。
+     */
+    public int countScored(String sessionId) {
+        return scoreRecordRepository.countBySessionId(sessionId);
+    }
+
+    /**
      * 评估本轮回答：是作答 → 评分落库并返回注入文本；否则/失败 → 空结果（面试不阻塞）。
      * 必须在面试官出题【之前】调用（评估结论要影响本题的难度与方向，见 InterviewAssistant.chat 时序）。
      *

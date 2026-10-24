@@ -199,4 +199,22 @@ public class AgentRouter extends StreamingPipelineSupport {
         return materialInterviewPipeline.chatWithMaterials(userMessage, texts, sessionId, candidateId);
     }
 
+    /**
+     * 知识库模式入口（阶段 12）——第五条路，同样是"确定性直达"：
+     * 会话在入场时已绑定 KNOWLEDGE 模式与题库、卷子已组好，本轮"考什么/怎么考"全部确定，
+     * 三道关口（资料画像存在性/资料规则/语义路由）一个都不该跑：
+     *   - 不查 material_profile：知识库会话没有该记录，第一道关口必不命中；
+     *   - 不跑资料规则与语义路由（实施计划风险 6）："用这个题库面我"极可能被 LLM 误判成
+     *     material-interview，白白多花一次路由 LLM 还走错流水线；
+     * 直连面试官：上下文装配（卷子 + 模式纪律 + 评估）由基类 buildChatMessages 按会话模式分叉。
+     *
+     * @param userMessage 用户本轮原话
+     * @param sessionId   会话 id
+     * @param candidateId 练习者 id（与资料模式同口径，跨会话薄弱点聚合键）
+     */
+    public Flux<String> chatForKnowledge(String userMessage, String sessionId, String candidateId) {
+        log.info("知识库模式直连面试官（跳过三道关口与语义路由）：sessionId={}", sessionId);
+        return interviewer.chat(userMessage, sessionId, candidateId);
+    }
+
 }

@@ -9,6 +9,7 @@ import com.xiao.aiagent.service.WeaknessProfileService;
 import com.alibaba.cloud.ai.graph.RunnableConfig;
 import com.alibaba.cloud.ai.graph.checkpoint.savers.MemorySaver;
 import com.xiao.aiagent.entity.InterviewPlan;
+import com.xiao.aiagent.entity.InterviewSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -89,6 +90,18 @@ public abstract class StreamingPipelineSupport {
                     + "只根据候选人此刻的提问做答疑、复盘与总结；"
                     + "如果候选人没有提问，简短说明面试已结束、可查看评估报告。";
 
+    /**
+     * 知识库模式的出题纪律覆盖（阶段 12，决策 7：背题自检不追问）。
+     * SYSTEM_PROMPT 第 2 条"针对回答进行追问"与背题场景直接冲突（用户要的是换下一题），
+     * 用一条后置 system 消息显式覆盖（与 FINISHED_PROMPT 同一"后到优先"的覆盖手法）；
+     * 其余纪律（一轮一问、标题格式、保密红线）保持不变。
+     */
+    static final String KNOWLEDGE_DISCIPLINE_PROMPT =
+            "【本场模式】这是知识库背题自检面试，本场卷子里已含全部题目与参考答案："
+                    + "严格按卷子顺序出题，答完给要点即换下一题。"
+                    + "系统提示中“针对回答进行追问”的规则在本场不适用——不要追问、不要深挖、"
+                    + "不要出卷子之外的题、不要即兴发挥；候选人问统计时也以卷子进度为准。";
+
     protected StreamingPipelineSupport(ChatMemory chatMemory,
                                        MemorySaver memorySaver,
                                        KnowledgeSearchService knowledgeSearchService,
@@ -110,10 +123,12 @@ public abstract class StreamingPipelineSupport {
     /**
      * 组装"通用上下文"（入口只有一次机会——因为路由/并行发生在图内部，没法先路由再定制）：
      *   ① 跨会话薄弱点回顾（4.3，WeaknessProfileService）→ SystemMessage（无历史记录跳过）；
-     *   ② 会话状态分叉（阶段 11）：
-     *      - 已结束 → 注入 FINISHED_PROMPT（不出题不评分），跳过计划与评估（它们的职责
+     *   ② 会话状态分叉（阶段 11）+ 模式分叉（阶段 12）：
+     *      - 已结束 → 注入 FINISHED_PROMPT（不出题不评分），跳过计划/卷子与评估（它们的职责
      *        是"驱动面试"，结束后继续跑只会白生成计划、误判作答）；
-     *      - 进行中 → 面试计划（5.2）+ 会话内评估（5.3），原行为不变；
+     *      - 进行中 + 知识库模式 → 注入【本场卷子】（renderPaper，含出题进度）+ 模式纪律覆盖，
+     *        不调 ensurePlan（卷子在入场已组好，绝不为此调 LLM 生成计划）；
+     *      - 进行中 + 资料模式 → 面试计划（5.2）+ 会话内评估（5.3），原行为不变；
      *   ③ 扩展点钩子（子类自有上下文，如直连路径的代码事实清单）；
      *   ④ 短期窗口历史 → 平铺进消息列表（最近 maxMessages 条）；
      *   ⑤ 用户本轮消息。
@@ -131,14 +146,31 @@ public abstract class StreamingPipelineSupport {
             messages.add(new SystemMessage(weaknessContext));
         }
 
-        // ② 会话状态分叉（阶段 11）：状态查询一轮一次（本地 PG，代价可忽略），
-        //    换来"结束后绝不出题"的确定性——模型自觉靠 prompt，状态机靠这里
-        boolean finished = interviewLifecycleService.isFinished(sessionId);
+        // ② 会话状态 + 模式分叉（阶段 11 状态 / 阶段 12 模式）：一次查询同时拿两样
+        //    （本地 PG 一次索引读，换来"结束后绝不出题 + 按模式注入"的确定性——模型自觉靠 prompt，分叉靠这里）
+        InterviewSession session = interviewLifecycleService.loadSession(sessionId).orElse(null);
+        boolean finished = session != null
+                && InterviewSession.STATUS_FINISHED.equals(session.getStatus());
+        boolean knowledgeMode = session != null
+                && InterviewSession.MODE_KNOWLEDGE.equals(session.getMode());
         InterviewPlan plan = null;
         if (finished) {
             messages.add(new SystemMessage(FINISHED_PROMPT));
+        } else if (knowledgeMode) {
+            // 知识库模式：卷子在入场时由 PaperComposeService 落库，这里只读取、绝不生成——
+            // "查不到卷子"说明数据异常（组卷被跳过/库被清），降级为无注入并留日志线索，
+            // 严禁 fallback 到 ensurePlan 的 LLM 生成（那会让知识库面试开始自由发挥，违背决策 1）
+            plan = interviewPlanService.loadPlan(sessionId).orElse(null);
+            String paperContext = interviewPlanService.renderPaper(
+                    plan, answerEvaluatorService.countScored(sessionId) + 1);
+            if (!paperContext.isBlank()) {
+                messages.add(new SystemMessage(paperContext));
+            } else {
+                log.warn("知识库会话查不到卷子，本轮无出题依据注入（疑似数据异常）：sessionId={}", sessionId);
+            }
+            messages.add(new SystemMessage(KNOWLEDGE_DISCIPLINE_PROMPT));
         } else {
-            // 面试计划（阶段 5.2）：无计划则生成（幂等，已有计划直接返回），注入后面试官按计划考点出题。
+            // 资料模式（原行为不变）：面试计划（阶段 5.2）——无计划则生成（幂等），
             // 生成失败返回 null → 渲染为空串 → 跳过注入，面试不阻塞（计划是增强项不是阻塞项）
             plan = interviewPlanService.ensurePlan(userMessage, sessionId, candidateId);
             String planContext = interviewPlanService.renderPlan(plan);

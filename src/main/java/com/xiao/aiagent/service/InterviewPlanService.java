@@ -167,8 +167,13 @@ public class InterviewPlanService {
      * 注入内容：完整卷子（题号 + 题目原文 + 参考答案）+ 出题纪律——
      * 按卷子顺序出题、答完给参考答案要点、不追问、不出卷外题（决策 7：背题自检不追问）。
      * 题号明确要求念出来：候选人问"第几题"时模型有据可答（进度显示属阶段 8）。
+     *
+     * @param plan             本场计划（paperJson 为卷子快照来源）
+     * @param currentQuestionNo 本轮应出的题号（已落库评分条数 + 1；≤1 视为从第 1 题开始）。
+     *                         答非所问的轮次不产生评分 → 题号不推进，注入文本会明确允许
+     *                         "重复该题或提示作答后再推进"（实施计划阶段 5 任务 4）
      */
-    public String renderPaper(InterviewPlan plan) {
+    public String renderPaper(InterviewPlan plan, int currentQuestionNo) {
         if (plan == null) {
             return "";
         }
@@ -176,6 +181,7 @@ public class InterviewPlanService {
         if (paper == null || paper.questions() == null || paper.questions().isEmpty()) {
             return "";
         }
+        int current = Math.max(currentQuestionNo, 1);
         StringBuilder sb = new StringBuilder();
         sb.append("【本场卷子】本场面试从知识库「").append(paper.kbName()).append("」抽取了 ")
                 .append(paper.questions().size()).append(" 道题。卷子内容如下（题号 + 题目 + 参考答案）：\n\n");
@@ -184,6 +190,8 @@ public class InterviewPlanService {
             sb.append("（参考答案：").append(q.referenceAnswer()).append("）\n\n");
         }
         sb.append("出题纪律：\n")
+                .append("- 本轮应出第 ").append(current).append(" 题（本会话已评完 ").append(current - 1)
+                .append(" 题）；若候选人的上一条消息没有实质回答上一题，请提示其作答，不要跳题；\n")
                 .append("- 严格按卷子顺序出题，一次只出一题；题目必须与卷子原文一致，不要改写、不要即兴发挥；\n")
                 .append("- 出题时只念题目本身，不要把参考答案念出来（参考答案在候选人作答后才用）；\n")
                 .append("- 候选人作答后，先用两三句话给出该题参考答案的要点，然后立即进入卷子中的下一题；\n")

@@ -59,7 +59,7 @@ class InterviewPlanServiceRenderPaperTest {
         @Test
         @DisplayName("注入文本含卷子全文（题库名/题号/题目/参考答案）与出题纪律")
         void 含卷子全文与纪律() throws Exception {
-            String text = service.renderPaper(planWithPaper());
+            String text = service.renderPaper(planWithPaper(), 1);
 
             assertTrue(text.contains("【本场卷子】"));
             assertTrue(text.contains("Java 题库"));
@@ -73,7 +73,7 @@ class InterviewPlanServiceRenderPaperTest {
         @Test
         @DisplayName("措辞与 renderPlan 保密红线相反：不含『备课材料』，含『参考答案在候选人作答后才用』")
         void 措辞独立于保密红线() throws Exception {
-            String text = service.renderPaper(planWithPaper());
+            String text = service.renderPaper(planWithPaper(), 1);
 
             assertFalse(text.contains("备课材料"), "卷子不是内部材料，保密措辞会让模型拒绝出题");
             assertFalse(text.contains("不要罗列"));
@@ -88,14 +88,14 @@ class InterviewPlanServiceRenderPaperTest {
         @Test
         @DisplayName("null 计划 / 无卷子 / 坏 JSON → 空串，调用方跳过注入，不抛异常")
         void 降级为空串() {
-            assertTrue(service.renderPaper(null).isEmpty());
+            assertTrue(service.renderPaper(null, 1).isEmpty());
 
             InterviewPlan noPaper = new InterviewPlan("s1", "c1", "[]",
                     InterviewPlanService.SOURCE_USER, java.time.LocalDateTime.now());
-            assertTrue(service.renderPaper(noPaper).isEmpty(), "资料模式计划（无 paperJson）应返回空串");
+            assertTrue(service.renderPaper(noPaper, 1).isEmpty(), "资料模式计划（无 paperJson）应返回空串");
 
             InterviewPlan badJson = planWithBadPaper();
-            assertTrue(service.renderPaper(badJson).isEmpty());
+            assertTrue(service.renderPaper(badJson, 1).isEmpty());
         }
 
         @Test
