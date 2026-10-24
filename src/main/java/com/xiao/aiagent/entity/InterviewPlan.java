@@ -62,12 +62,23 @@ public class InterviewPlan {
     private String topicsJson;
 
     /**
-     * 计划来源：JD=依据 JD 考察矩阵生成（评分基准）；USER=仅依据用户消息推断（临时计划）。
+     * 计划来源：JD=依据 JD 考察矩阵生成（评分基准）；USER=仅依据用户消息推断（临时计划）；
+     * KNOWLEDGE=知识库组卷（阶段 12，paperJson 必有）。
      * 为什么区分：综合面试首轮分析官还没跑完，JD 画像不在库，只能先按用户消息出临时计划
      * 保证第一题就有基准；JD 画像落库后 ensurePlan 会把 USER 计划升级重生成（InterviewPlanService）。
      */
     @Column(nullable = false, length = 16)
     private String source;
+
+    /**
+     * 卷子快照 JSON（阶段 12 新增，知识库模式专用；资料模式恒为 NULL），结构（PaperDto）：
+     *   {"kbName":"Java 题库","questions":[{"no":1,"stem":"…","referenceAnswer":"…","category":"集合","questionId":42},…]}
+     * 存快照而不是每次去 question_bank 现查：题库后续增删题不影响已开场的面试
+     * （与"计划不做中途更换"同一约定），且面试官每轮注入的是确定内容。
+     * 评估与报告不读它——它们用 topics_json 词表（组卷时从同批题目同步生成）。
+     */
+    @Column(columnDefinition = "text")
+    private String paperJson;
 
     /** 生成/升级时间（服务端生成，不依赖 LLM 传时间，与 ScoreRecord/MaterialProfile 一致） */
     @Column(nullable = false)

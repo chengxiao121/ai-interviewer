@@ -1,5 +1,6 @@
 package com.xiao.aiagent.service;
 import com.xiao.aiagent.dto.PlanTopic;
+import com.xiao.aiagent.dto.PaperDto;
 import com.xiao.aiagent.common.LlmJson;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -53,9 +54,11 @@ public class InterviewPlanService {
 
     private static final Logger log = LoggerFactory.getLogger(InterviewPlanService.class);
 
-    /** 计划来源：JD=依据 JD 考察矩阵（评分基准）；USER=仅依据用户消息（临时计划，待升级） */
+    /** 计划来源：JD=依据 JD 考察矩阵（评分基准）；USER=仅依据用户消息（临时计划，待升级）；
+     *  KNOWLEDGE=知识库组卷（阶段 12，卷子快照在 paperJson，不经本服务的 LLM 生成） */
     public static final String SOURCE_JD = "JD";
     public static final String SOURCE_USER = "USER";
+    public static final String SOURCE_KNOWLEDGE = "KNOWLEDGE";
 
     /** JD 画像落库时的 profileType（与 JdAnalyzerAgent 约定一致，升级探测用） */
     private static final String PROFILE_TYPE_JD = "JD";
@@ -95,6 +98,11 @@ public class InterviewPlanService {
     /**
      * 保证该会话存在面试计划，返回计划；生成失败返回 null（调用方跳过注入，不阻塞面试）。
      * 幂等：已有计划直接返回（每轮调用只花一次索引查询）；唯一会重生成的情况是 USER→JD 升级。
+     *
+     * 知识库模式（阶段 12）：卷子在入场时由 PaperComposeService 落库（source=KNOWLEDGE，
+     * paperJson 必有），本方法只走"查到 → 返回"分支，不会为知识库会话调 LLM 生成计划——
+     * 升级分支以 SOURCE_USER 为前提，KNOWLEDGE 计划天然不触发；
+     * "查不到计划"只可能发生在资料模式（知识库会话入场即组卷，组卷失败则入场被 400 拒绝）。
      *
      * @param userMessage 用户本轮消息（首轮生成计划的领域依据；升级时作辅助输入）
      * @param sessionId   会话 id（一场一份计划）
@@ -147,6 +155,57 @@ public class InterviewPlanService {
     /** 读取某场面试的计划（评估官/报告用；无计划返回 empty，消费方自行降级） */
     public Optional<InterviewPlan> loadPlan(String sessionId) {
         return interviewPlanRepository.findBySessionId(sessionId);
+    }
+
+    /**
+     * 渲染【本场卷子】为 system 注入文本（阶段 12，知识库模式专用）；无卷子返回空串。
+     *
+     * 为什么不复用 renderPlan（计划文档风险 4）：renderPlan 的措辞是"计划是你的内部
+     * 备课材料，不要罗列"——那是资料模式的保密红线；而卷子的题目恰恰是要念给候选人
+     * 听的，误用会让模型拒绝出题或只给暗示。两条注入路径必须措辞相反、各自独立。
+     *
+     * 注入内容：完整卷子（题号 + 题目原文 + 参考答案）+ 出题纪律——
+     * 按卷子顺序出题、答完给参考答案要点、不追问、不出卷外题（决策 7：背题自检不追问）。
+     * 题号明确要求念出来：候选人问"第几题"时模型有据可答（进度显示属阶段 8）。
+     */
+    public String renderPaper(InterviewPlan plan) {
+        if (plan == null) {
+            return "";
+        }
+        PaperDto paper = parsePaper(plan.getPaperJson()).orElse(null);
+        if (paper == null || paper.questions() == null || paper.questions().isEmpty()) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("【本场卷子】本场面试从知识库「").append(paper.kbName()).append("」抽取了 ")
+                .append(paper.questions().size()).append(" 道题。卷子内容如下（题号 + 题目 + 参考答案）：\n\n");
+        for (PaperDto.PaperQuestion q : paper.questions()) {
+            sb.append("第 ").append(q.no()).append(" 题：").append(q.stem()).append('\n');
+            sb.append("（参考答案：").append(q.referenceAnswer()).append("）\n\n");
+        }
+        sb.append("出题纪律：\n")
+                .append("- 严格按卷子顺序出题，一次只出一题；题目必须与卷子原文一致，不要改写、不要即兴发挥；\n")
+                .append("- 出题时只念题目本身，不要把参考答案念出来（参考答案在候选人作答后才用）；\n")
+                .append("- 候选人作答后，先用两三句话给出该题参考答案的要点，然后立即进入卷子中的下一题；\n")
+                .append("- 不追问、不出卷子之外的题；候选人问“还有几道题/第几题”时如实报数。");
+        return sb.toString();
+    }
+
+    /**
+     * 解析卷子快照 JSON（paperJson → PaperDto）；无卷子或解析失败返回 empty。
+     * 卷子是我们自己序列化落库的干净 JSON（不经 LLM），直接反序列化即可，
+     * 不走 LlmJson.extract（那是给 LLM 输出去围栏用的）。
+     */
+    public Optional<PaperDto> parsePaper(String paperJson) {
+        if (paperJson == null || paperJson.isBlank()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.ofNullable(objectMapper.readValue(paperJson, PaperDto.class));
+        } catch (Exception e) {
+            log.warn("卷子快照 JSON 解析失败：sessionId 疑似数据损坏，按无卷子处理（{}）", e.getMessage());
+            return Optional.empty();
+        }
     }
 
     /**
